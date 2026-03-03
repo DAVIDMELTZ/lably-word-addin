@@ -7,13 +7,13 @@
   xsi:type="TaskPaneApp">
 
   <Id>9fe88699-2745-4cf9-b534-0dbc043a8282</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.1.0.0</Version>
   <ProviderName>Lably</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Lably"/>
   <Description DefaultValue="Insert citations and bibliographies from Lably directly into Word documents"/>
   <IconUrl DefaultValue="https://word-addin.lably.cloud/assets/icon-32.png"/>
-  <HighResolutionIconUrl DefaultValue="https://word-addin.lably.cloud/assets/icon-80.png"/>
+  <HighResolutionIconUrl DefaultValue="https://word-addin.lably.cloud/assets/icon-64.png"/>
   <SupportUrl DefaultValue="https://word-addin.lably.cloud/taskpane.html"/>
 
   <Hosts>
