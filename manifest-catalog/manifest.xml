@@ -26,6 +26,12 @@
     <Host Name="Document"/>
   </Hosts>
 
+  <Requirements>
+    <Sets>
+      <Set Name="WordApi" MinVersion="1.3"/>
+    </Sets>
+  </Requirements>
+
   <DefaultSettings>
     <SourceLocation DefaultValue="https://word-addin.lably.cloud/taskpane.html"/>
   </DefaultSettings>
