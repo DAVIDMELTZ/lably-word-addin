@@ -8,7 +8,7 @@
 
   <Id>9fe88699-2745-4cf9-b534-0dbc043a8282</Id>
   <Version>1.1.0.0</Version>
-  <ProviderName>Lably</ProviderName>
+  <ProviderName>Inhouse IT (Pty) Ltd</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Lably"/>
   <Description DefaultValue="Insert citations and bibliographies from Lably directly into Word documents"/>
