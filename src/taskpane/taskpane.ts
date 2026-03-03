@@ -582,8 +582,59 @@ class UIController {
     if (authState.isAuthenticated) {
       this.showProjectView();
     } else {
-      this.showLoginView();
+      // Check if user has seen the welcome screen before
+      const hasSeenWelcome = sessionStorage.getItem("lably_has_seen_welcome");
+      if (hasSeenWelcome) {
+        this.showLoginView();
+      } else {
+        this.showWelcomeView();
+      }
     }
+  }
+
+  // ========================================================================
+  // WELCOME / FIRST-RUN VIEW
+  // ========================================================================
+
+  private showWelcomeView(): void {
+    const root = document.getElementById("root")!;
+    root.innerHTML = `
+      <div class="welcome-container">
+        <div class="welcome-icon">
+          <img src="assets/icon-80.png" alt="Lably" width="64" height="64" />
+        </div>
+        <h2>Welcome to Lably</h2>
+        <p class="welcome-tagline">Your citation manager, right inside Word.</p>
+        <div class="welcome-features">
+          <div class="welcome-feature">
+            <span class="feature-icon">1</span>
+            <p>Search and select references from your Lably projects</p>
+          </div>
+          <div class="welcome-feature">
+            <span class="feature-icon">2</span>
+            <p>Insert perfectly formatted inline citations at your cursor</p>
+          </div>
+          <div class="welcome-feature">
+            <span class="feature-icon">3</span>
+            <p>Auto-generate and update your bibliography as you write</p>
+          </div>
+        </div>
+        <p class="welcome-styles">Supports APA, MLA, Chicago, Harvard, IEEE and more.</p>
+        <div class="welcome-auth-notice">
+          <p>Sign in with your Lably account to get started. Don't have an account? You can sign up for free at <a href="https://lably.cloud" target="_blank">lably.cloud</a>.</p>
+        </div>
+        <button id="getStartedBtn" class="btn btn-primary btn-large">Get Started</button>
+        <div class="welcome-links">
+          <a href="https://lably.cloud/support" target="_blank">Support</a>
+          <span class="link-divider">|</span>
+          <a href="https://lably.cloud/privacy" target="_blank">Privacy Policy</a>
+        </div>
+      </div>
+    `;
+    document.getElementById("getStartedBtn")!.addEventListener("click", () => {
+      sessionStorage.setItem("lably_has_seen_welcome", "true");
+      this.showLoginView();
+    });
   }
 
   // ========================================================================
@@ -608,6 +659,10 @@ class UIController {
           <button type="submit" class="btn btn-primary" id="loginBtn">Sign In</button>
         </form>
         <div id="loginError" class="error-message" style="display: none;"></div>
+        <div class="login-links">
+          <p>Don't have an account? <a href="https://lably.cloud/signup" target="_blank">Sign up</a></p>
+          <p><a href="https://lably.cloud/support" target="_blank">Need help?</a></p>
+        </div>
       </div>
     `;
     document.getElementById("loginForm")!.addEventListener("submit", (e) => this.handleLogin(e));

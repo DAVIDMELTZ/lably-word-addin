@@ -109,6 +109,128 @@ body {
   font-size: 13px;
 }
 
+/* ---- Welcome / First-Run ---- */
+
+.welcome-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 32px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  text-align: center;
+}
+
+.welcome-icon {
+  margin-bottom: 12px;
+}
+
+.welcome-icon img {
+  border-radius: 12px;
+}
+
+.welcome-container h2 {
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.welcome-tagline {
+  font-size: 14px;
+  opacity: 0.9;
+  margin-bottom: 20px;
+}
+
+.welcome-features {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 16px;
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.welcome-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.welcome-feature:last-child {
+  margin-bottom: 0;
+}
+
+.feature-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.welcome-feature p {
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.welcome-styles {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-bottom: 16px;
+}
+
+.welcome-auth-notice {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 12px 16px;
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.welcome-auth-notice a {
+  color: white;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.btn-large {
+  padding: 14px 32px;
+  font-size: 16px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.welcome-links {
+  margin-top: 16px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.welcome-links a {
+  color: white;
+  text-decoration: none;
+}
+
+.welcome-links a:hover {
+  text-decoration: underline;
+}
+
+.link-divider {
+  margin: 0 8px;
+}
+
+/* ---- Login ---- */
+
 .login-container {
   display: flex;
   flex-direction: column;
@@ -169,6 +291,26 @@ body {
 .login-container .error-message {
   margin-top: 16px;
   max-width: 360px;
+}
+
+.login-links {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.login-links p {
+  margin-bottom: 6px;
+}
+
+.login-links a {
+  color: white;
+  text-decoration: underline;
+  font-weight: 500;
+}
+
+.login-links a:hover {
+  opacity: 0.8;
 }
 
 .projects-container {
