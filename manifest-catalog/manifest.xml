@@ -16,6 +16,12 @@
   <HighResolutionIconUrl DefaultValue="https://word-addin.lably.cloud/assets/icon-64.png"/>
   <SupportUrl DefaultValue="https://word-addin.lably.cloud/taskpane.html"/>
 
+  <AppDomains>
+    <AppDomain>https://word-addin.lably.cloud</AppDomain>
+    <AppDomain>https://lably.cloud</AppDomain>
+    <AppDomain>https://pgrfsrqnozhhxdovqnvc.supabase.co</AppDomain>
+  </AppDomains>
+
   <Hosts>
     <Host Name="Document"/>
   </Hosts>
