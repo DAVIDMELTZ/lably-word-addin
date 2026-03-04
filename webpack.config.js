@@ -44,6 +44,10 @@ module.exports = async (env, options) => {
             to: "assets",
             noErrorOnMissing: true,
           },
+          {
+            from: "manifest.xml",
+            to: "manifest.xml",
+          },
         ],
       }),
     ],
