@@ -6,8 +6,8 @@
   xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
   xsi:type="TaskPaneApp">
 
-  <Id>9fe88699-2745-4cf9-b534-0dbc043a8282</Id>
-  <Version>1.4.0.0</Version>
+  <Id>4fd16e51-7645-4f9c-9880-447267e82523</Id>
+  <Version>1.0.0.0</Version>
   <ProviderName>Inhouse IT (Pty) Ltd</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Lably"/>
