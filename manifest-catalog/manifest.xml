@@ -7,20 +7,19 @@
   xsi:type="TaskPaneApp">
 
   <Id>4fd16e51-7645-4f9c-9880-447267e82523</Id>
-  <Version>1.0.3.0</Version>
+  <Version>1.0.4.0</Version>
   <ProviderName>INhouse IT (Pty) Ltd</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Lably"/>
   <Description DefaultValue="Insert citations and bibliographies from Lably directly into Word documents"/>
-  <IconUrl DefaultValue="https://raw.githubusercontent.com/DAVIDMELTZ/lably-word-addin/main/assets/lably-32.png"/>
-  <HighResolutionIconUrl DefaultValue="https://raw.githubusercontent.com/DAVIDMELTZ/lably-word-addin/main/assets/lably-64.png"/>
+  <IconUrl DefaultValue="https://word-addin.lably.cloud/assets/lably-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://word-addin.lably.cloud/assets/lably-64.png"/>
   <SupportUrl DefaultValue="https://lably.cloud/support"/>
 
   <AppDomains>
     <AppDomain>https://word-addin.lably.cloud</AppDomain>
     <AppDomain>https://lably.cloud</AppDomain>
     <AppDomain>https://pgrfsrqnozhhxdovqnvc.supabase.co</AppDomain>
-    <AppDomain>https://raw.githubusercontent.com</AppDomain>
   </AppDomains>
 
   <Hosts>
@@ -82,9 +81,9 @@
 
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="https://raw.githubusercontent.com/DAVIDMELTZ/lably-word-addin/main/assets/lably-16.png"/>
-        <bt:Image id="Icon.32x32" DefaultValue="https://raw.githubusercontent.com/DAVIDMELTZ/lably-word-addin/main/assets/lably-32.png"/>
-        <bt:Image id="Icon.80x80" DefaultValue="https://raw.githubusercontent.com/DAVIDMELTZ/lably-word-addin/main/assets/lably-80.png"/>
+        <bt:Image id="Icon.16x16" DefaultValue="https://word-addin.lably.cloud/assets/lably-16.png"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://word-addin.lably.cloud/assets/lably-32.png"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://word-addin.lably.cloud/assets/lably-80.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Taskpane.Url" DefaultValue="https://word-addin.lably.cloud/taskpane.html"/>
