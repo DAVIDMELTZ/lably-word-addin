@@ -7,7 +7,7 @@
   xsi:type="TaskPaneApp">
 
   <Id>4fd16e51-7645-4f9c-9880-447267e82523</Id>
-  <Version>1.0.1.0</Version>
+  <Version>1.0.2.0</Version>
   <ProviderName>INhouse IT (Pty) Ltd</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Lably"/>
