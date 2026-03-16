@@ -43,6 +43,19 @@ interface AuthState {
   refreshToken: string | null;
 }
 
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+}
+
+interface DocumentContext {
+  selectedText?: string;
+  citationStyle?: string;
+  documentId?: string;
+  projectId?: string;
+}
+
 // ============================================================================
 // UTILITIES
 // ============================================================================
@@ -419,6 +432,101 @@ class CitationAPI {
 }
 
 // ============================================================================
+// CHAT SERVICE (AI ASSISTANT)
+// ============================================================================
+
+class ChatService {
+  constructor(private auth: AuthService) {}
+
+  async sendMessage(
+    messages: { role: string; content: string }[],
+    conversationId: string | null,
+    documentContext: DocumentContext | null,
+    onChunk: (text: string) => void,
+  ): Promise<{ fullResponse: string; conversationId: string | null }> {
+    const authHeader = this.auth.getAuthHeader();
+    if (!authHeader) throw new Error("Not authenticated");
+
+    const body: any = {
+      messages,
+      conversationId: conversationId || undefined,
+      mode: "general",
+    };
+    if (documentContext) {
+      body.documentContext = documentContext;
+    }
+
+    let response = await fetch(`${API_BASE_URL}/personal-assistant`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeader,
+      },
+      body: JSON.stringify(body),
+    });
+
+    // Retry on 401
+    if (response.status === 401) {
+      const refreshed = await this.auth.refreshAccessToken();
+      if (refreshed) {
+        const newAuthHeader = this.auth.getAuthHeader();
+        response = await fetch(`${API_BASE_URL}/personal-assistant`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...newAuthHeader,
+          },
+          body: JSON.stringify(body),
+        });
+      } else {
+        throw new Error("Session expired. Please log in again.");
+      }
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: "Chat request failed" }));
+      throw new Error(error.message || "Chat request failed");
+    }
+
+    // Parse SSE stream
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("No response stream");
+
+    const decoder = new TextDecoder();
+    let fullResponse = "";
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data: ")) continue;
+        const data = trimmed.slice(6);
+        if (data === "[DONE]") continue;
+        try {
+          const parsed = JSON.parse(data);
+          const chunk = parsed.choices?.[0]?.delta?.content;
+          if (chunk) {
+            fullResponse += chunk;
+            onChunk(chunk);
+          }
+        } catch {
+          // Skip unparseable lines
+        }
+      }
+    }
+
+    return { fullResponse, conversationId };
+  }
+}
+
+// ============================================================================
 // WORD DOCUMENT SERVICE
 // ============================================================================
 
@@ -553,6 +661,35 @@ class WordService {
       await context.sync();
     });
   }
+
+  /**
+   * Get the currently selected text in the Word document.
+   */
+  async getSelectedText(): Promise<string> {
+    try {
+      return await Word.run(async (context) => {
+        const range = context.document.getSelection();
+        range.load("text");
+        await context.sync();
+        return range.text || "";
+      });
+    } catch {
+      return "";
+    }
+  }
+
+  /**
+   * Insert plain text at the current cursor position.
+   */
+  async insertTextAtCursor(text: string): Promise<void> {
+    if (!text || !text.trim()) return;
+    await Word.run(async (context) => {
+      const range = context.document.getSelection();
+      range.insertText(text, "After");
+      await context.sync();
+    });
+  }
+
 }
 
 // ============================================================================
@@ -576,8 +713,16 @@ class UIController {
   // Dynamic citation styles — loaded from backend, fallback to FALLBACK_STYLES
   private availableStyles: string[] = [...FALLBACK_STYLES];
 
+  // Chat state
+  private chat: ChatService = new ChatService(this.auth);
+  private chatMessages: ChatMessage[] = [];
+  private chatConversationId: string | null = null;
+  private chatOpen = false;
+  private chatStreaming = false;
+
   async initialize(): Promise<void> {
     await Office.onReady();
+    this.loadChatState();
     const authState = this.auth.getState();
     if (authState.isAuthenticated) {
       this.showProjectView();
@@ -711,8 +856,14 @@ class UIController {
 
     document.getElementById("logoutBtn")!.addEventListener("click", () => {
       this.auth.logout();
+      this.clearChat();
+      const panel = document.getElementById("chatPanel");
+      if (panel) panel.remove();
+      this.chatOpen = false;
       this.showLoginView();
     });
+
+    this.renderChatToggle();
 
     try {
       // Load projects and available styles in parallel
@@ -824,6 +975,7 @@ class UIController {
     document.getElementById("insertInlineBtn")!.addEventListener("click", () => this.insertSelectedCitations());
     document.getElementById("insertBibBtn")!.addEventListener("click", () => this.insertBibliographyOnly());
 
+    this.renderChatToggle();
     this.loadReferences();
   }
 
@@ -1089,6 +1241,246 @@ class UIController {
       if (btn) { btn.disabled = this.selectedReferences.size === 0; btn.textContent = "Insert Bibliography"; }
     }
   }
+
+
+  // ========================================================================
+  // CHAT PANEL
+  // ========================================================================
+
+  private renderChatToggle(): void {
+    // Remove existing toggle if present
+    const existing = document.getElementById("chatToggleBtn");
+    if (existing) existing.remove();
+
+    const btn = document.createElement("button");
+    btn.id = "chatToggleBtn";
+    btn.className = "chat-toggle-btn";
+    btn.title = "AI Assistant";
+    btn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+    btn.addEventListener("click", () => this.toggleChat());
+    document.getElementById("root")!.appendChild(btn);
+
+    // Re-render panel if it was open
+    if (this.chatOpen) {
+      this.renderChatPanel();
+    }
+  }
+
+  private toggleChat(): void {
+    this.chatOpen = !this.chatOpen;
+    if (this.chatOpen) {
+      this.renderChatPanel();
+    } else {
+      const panel = document.getElementById("chatPanel");
+      if (panel) panel.remove();
+    }
+  }
+
+  private renderChatPanel(): void {
+    // Remove existing panel
+    let panel = document.getElementById("chatPanel");
+    if (panel) panel.remove();
+
+    panel = document.createElement("div");
+    panel.id = "chatPanel";
+    panel.className = "chat-panel";
+    panel.innerHTML = `
+      <div class="chat-header">
+        <span class="chat-title">AI Assistant</span>
+        <div class="chat-header-actions">
+          <button id="chatNewBtn" class="chat-header-btn" title="New Chat">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button id="chatCloseBtn" class="chat-header-btn" title="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="chatMessages" class="chat-messages"></div>
+      <div class="chat-input-area">
+        <textarea id="chatInput" class="chat-input" placeholder="Ask the AI assistant..." rows="2"></textarea>
+        <button id="chatSendBtn" class="chat-send-btn" title="Send">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+
+    // Render existing messages
+    this.renderChatMessages();
+
+    // Event listeners
+    document.getElementById("chatCloseBtn")!.addEventListener("click", () => this.toggleChat());
+    document.getElementById("chatNewBtn")!.addEventListener("click", () => {
+      this.clearChat();
+      this.renderChatMessages();
+    });
+    document.getElementById("chatSendBtn")!.addEventListener("click", () => this.sendChatMessage());
+
+    const input = document.getElementById("chatInput") as HTMLTextAreaElement;
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        this.sendChatMessage();
+      }
+    });
+    input.focus();
+  }
+
+  private renderChatMessages(): void {
+    const container = document.getElementById("chatMessages");
+    if (!container) return;
+
+    if (this.chatMessages.length === 0) {
+      container.innerHTML = `
+        <div class="chat-empty">
+          <p>Ask me anything about your research, document, or references.</p>
+          <p class="chat-empty-hint">Tip: Select text in your document and I can help you with it.</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = this.chatMessages.map((msg) => `
+      <div class="chat-message chat-message-${msg.role}">
+        <div class="chat-bubble chat-bubble-${msg.role}">
+          ${this.formatChatContent(msg.content)}
+        </div>
+      </div>
+    `).join("");
+
+    // Add typing indicator if streaming
+    if (this.chatStreaming) {
+      container.innerHTML += `
+        <div class="chat-message chat-message-assistant">
+          <div class="chat-bubble chat-bubble-assistant chat-typing">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      `;
+    }
+
+    container.scrollTop = container.scrollHeight;
+  }
+
+  private formatChatContent(content: string): string {
+    return escapeHtml(content)
+      .replace(/\n/g, "<br>")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.+?)\*/g, "<em>$1</em>")
+      .replace(/`(.+?)`/g, "<code>$1</code>");
+  }
+
+  private async sendChatMessage(): Promise<void> {
+    if (this.chatStreaming) return;
+
+    const input = document.getElementById("chatInput") as HTMLTextAreaElement | null;
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+
+    input.value = "";
+
+    // Add user message
+    this.chatMessages.push({ role: "user", content: text, timestamp: Date.now() });
+    this.saveChatState();
+    this.renderChatMessages();
+
+    // Get document context
+    let documentContext: DocumentContext | null = null;
+    try {
+      const selectedText = await this.word.getSelectedText();
+      if (selectedText || this.currentProject) {
+        documentContext = {
+          selectedText: selectedText || undefined,
+          citationStyle: this.currentStyle || undefined,
+          projectId: this.currentProject?.id || undefined,
+        };
+      }
+    } catch {
+      // Document context unavailable
+    }
+
+    // Build message history for API (all messages with content, for context)
+    const apiMessages = this.chatMessages
+      .filter((m) => m.content)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    // Start streaming
+    this.chatStreaming = true;
+    const sendBtn = document.getElementById("chatSendBtn") as HTMLButtonElement | null;
+    if (sendBtn) sendBtn.disabled = true;
+
+    // Add placeholder assistant message
+    const assistantMsg: ChatMessage = { role: "assistant", content: "", timestamp: Date.now() };
+    this.chatMessages.push(assistantMsg);
+    this.renderChatMessages();
+
+    try {
+      const result = await this.chat.sendMessage(
+        apiMessages,
+        this.chatConversationId,
+        documentContext,
+        (chunk) => {
+          assistantMsg.content += chunk;
+          // Update the last message bubble directly for performance
+          const container = document.getElementById("chatMessages");
+          if (container) {
+            const bubbles = container.querySelectorAll(".chat-bubble-assistant");
+            const lastBubble = bubbles[bubbles.length - 1];
+            if (lastBubble && !lastBubble.classList.contains("chat-typing")) {
+              lastBubble.innerHTML = this.formatChatContent(assistantMsg.content);
+              container.scrollTop = container.scrollHeight;
+            }
+          }
+        },
+      );
+
+      if (result.conversationId) {
+        this.chatConversationId = result.conversationId;
+      }
+    } catch (error) {
+      assistantMsg.content = `Sorry, I encountered an error: ${error instanceof Error ? error.message : "Unknown error"}`;
+    } finally {
+      this.chatStreaming = false;
+      if (sendBtn) sendBtn.disabled = false;
+      this.saveChatState();
+      this.renderChatMessages();
+      const inputAfter = document.getElementById("chatInput") as HTMLTextAreaElement | null;
+      if (inputAfter) inputAfter.focus();
+    }
+  }
+
+  private saveChatState(): void {
+    try {
+      sessionStorage.setItem("lably_chat_state", JSON.stringify({
+        messages: this.chatMessages,
+        conversationId: this.chatConversationId,
+      }));
+    } catch {
+      // Storage full or unavailable
+    }
+  }
+
+  private loadChatState(): void {
+    try {
+      const stored = sessionStorage.getItem("lably_chat_state");
+      if (stored) {
+        const state = JSON.parse(stored);
+        this.chatMessages = state.messages || [];
+        this.chatConversationId = state.conversationId || null;
+      }
+    } catch {
+      // Invalid stored state
+    }
+  }
+
+  private clearChat(): void {
+    this.chatMessages = [];
+    this.chatConversationId = null;
+    this.saveChatState();
+  }
+
 }
 
 // ============================================================================
