@@ -1404,17 +1404,102 @@ class UIController {
         btn.textContent = "Inserting...";
         try {
           await this.word.insertTextAtCursor(plainText);
-          btn.textContent = "Inserted!";
+
+          // Auto-detect cited references and update bibliography
+          const citedRefIds = this.matchCitedReferences(plainText);
+          if (citedRefIds.length > 0) {
+            for (const refId of citedRefIds) {
+              const ref = this.loadedReferences.find((r) => String(r.id) === refId);
+              if (ref) this.citedReferences.set(String(ref.id), ref);
+              if (!this.ieeeNumbers.has(refId)) {
+                this.ieeeNumbers.set(refId, this.ieeeNumbers.size + 1);
+              }
+            }
+
+            // Build and insert/update bibliography
+            let bibEntries: string[] = [];
+            if (this.currentProject) {
+              try {
+                const allCitedIds = Array.from(this.citedReferences.keys());
+                const bibRaw = await this.api.getBibliography(this.currentProject.id, allCitedIds, this.currentStyle);
+                const bibArr = extractArray(bibRaw);
+                if (bibArr.length > 0) {
+                  bibEntries = bibArr.map((entry: any) => {
+                    if (typeof entry === "string") return entry;
+                    if (entry.bibliography) return String(entry.bibliography);
+                    if (entry.formatted) return String(entry.formatted);
+                    if (entry.text) return String(entry.text);
+                    return String(entry);
+                  });
+                }
+              } catch {
+                // Backend bibliography API unavailable
+              }
+            }
+
+            if (bibEntries.length === 0) {
+              bibEntries = Array.from(this.citedReferences.entries())
+                .map(([id, ref]) => getBibEntry(ref, this.currentStyle, this.ieeeNumbers.get(id)));
+            }
+
+            await this.word.insertOrUpdateBibliography(bibEntries);
+          }
+
+          const bibNote = citedRefIds.length > 0 ? ` (${citedRefIds.length} ref(s) added to bibliography)` : "";
+          btn.textContent = "Inserted!" + bibNote;
           setTimeout(() => {
             btn.disabled = false;
             btn.innerHTML = origHtml;
-          }, 2000);
+          }, 2500);
         } catch (err) {
           btn.textContent = "Failed - try again";
           btn.disabled = false;
         }
       });
     });
+  }
+  /**
+   * Scan AI response text for citation patterns and match against loaded project references.
+   * Returns an array of reference IDs that appear to be cited in the text.
+   */
+  private matchCitedReferences(text: string): string[] {
+    if (!this.loadedReferences.length) return [];
+
+    const matchedIds: Set<string> = new Set();
+    const lowerText = text.toLowerCase();
+
+    for (const ref of this.loadedReferences) {
+      const authors = extractAuthors(ref.authors);
+      if (authors.length === 0) continue;
+
+      const lastName = authors[0].last;
+      if (!lastName || lastName === "Unknown") continue;
+
+      const lowerName = lastName.toLowerCase();
+      const year = ref.year ? String(ref.year) : null;
+
+      // Check if the author's last name appears in the text
+      const nameIdx = lowerText.indexOf(lowerName);
+      if (nameIdx === -1) continue;
+
+      // If we have a year, check if name and year appear near each other (within 50 chars)
+      if (year) {
+        const yearIdx = lowerText.indexOf(year, Math.max(0, nameIdx - 50));
+        if (yearIdx !== -1 && Math.abs(yearIdx - nameIdx) < 50) {
+          matchedIds.add(String(ref.id));
+          continue;
+        }
+      }
+
+      // Check if name appears inside parentheses: (Name...) - common for all styles
+      const before = text.lastIndexOf("(", nameIdx);
+      const after = text.indexOf(")", nameIdx);
+      if (before !== -1 && after !== -1 && (nameIdx - before) < 30 && (after - nameIdx) < 50) {
+        matchedIds.add(String(ref.id));
+      }
+    }
+
+    return Array.from(matchedIds);
   }
 
   private formatChatContent(content: string): string {
