@@ -1361,10 +1361,25 @@ class UIController {
     }
 
     container.scrollTop = container.scrollHeight;
+
+    // Wire up action buttons
+    container.querySelectorAll<HTMLButtonElement>(".chat-action-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const action = btn.getAttribute("data-action");
+        if (action) {
+          const input = document.getElementById("chatInput") as HTMLTextAreaElement | null;
+          if (input) {
+            input.value = action;
+            this.sendChatMessage();
+          }
+        }
+      });
+    });
   }
 
   private formatChatContent(content: string): string {
     return escapeHtml(content)
+      .replace(/\{\{action:(.+?)\}\}/g, '<button class="chat-action-btn" data-action="$1">$1</button>')
       .replace(/\n/g, "<br>")
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
       .replace(/\*(.+?)\*/g, "<em>$1</em>")

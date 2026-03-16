@@ -770,3 +770,24 @@ body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ---- Chat Action Buttons ---- */
+
+.chat-action-btn {
+  display: inline-block;
+  margin: 4px 4px 4px 0;
+  padding: 6px 12px;
+  background: white;
+  color: #667eea;
+  border: 1px solid #667eea;
+  border-radius: 16px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.chat-action-btn:hover {
+  background: #667eea;
+  color: white;
+}
