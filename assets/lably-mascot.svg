@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" width="400" height="500">
+  <defs>
+    <!-- Soft shadow filter -->
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000022"/>
+    </filter>
+    <!-- Glow for cheeks -->
+    <radialGradient id="blush" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FF9999" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#FF9999" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Body fur gradient -->
+    <radialGradient id="furGrad" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#D4A574"/>
+      <stop offset="100%" stop-color="#B8895A"/>
+    </radialGradient>
+    <!-- Head fur gradient -->
+    <radialGradient id="headGrad" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#D4A574"/>
+      <stop offset="100%" stop-color="#C49A6C"/>
+    </radialGradient>
+    <!-- Belly/muzzle lighter area -->
+    <radialGradient id="lightFur" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F0D9B5"/>
+      <stop offset="100%" stop-color="#E8CDA0"/>
+    </radialGradient>
+    <!-- Lab coat gradient -->
+    <linearGradient id="coatGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F0F0F0"/>
+    </linearGradient>
+    <!-- Glasses lens reflection -->
+    <linearGradient id="lensGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.3"/>
+      <stop offset="50%" stop-color="#E8F4FD" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Ear inner gradient -->
+    <radialGradient id="earInner" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#EDAB8A"/>
+      <stop offset="100%" stop-color="#D4907A"/>
+    </radialGradient>
+  </defs>
+
+  <!-- === EARS (behind head) === -->
+  <!-- Left ear -->
+  <ellipse cx="135" cy="115" rx="42" ry="42" fill="#C49A6C" stroke="#A07850" stroke-width="2"/>
+  <ellipse cx="135" cy="115" rx="28" ry="28" fill="url(#earInner)"/>
+  <!-- Right ear -->
+  <ellipse cx="265" cy="115" rx="42" ry="42" fill="#C49A6C" stroke="#A07850" stroke-width="2"/>
+  <ellipse cx="265" cy="115" rx="28" ry="28" fill="url(#earInner)"/>
+
+  <!-- === BODY === -->
+  <!-- Main body (round and chubby) -->
+  <ellipse cx="200" cy="355" rx="105" ry="115" fill="url(#furGrad)" stroke="#A07850" stroke-width="2" filter="url(#shadow)"/>
+  <!-- Belly patch -->
+  <ellipse cx="200" cy="365" rx="65" ry="72" fill="url(#lightFur)"/>
+
+  <!-- === LAB COAT === -->
+  <!-- Coat body - left side -->
+  <path d="M105 280 Q95 280 90 300 L80 430 Q78 445 95 448 L170 455 Q180 455 180 445 L180 290 Q180 280 170 280 Z"
+        fill="url(#coatGrad)" stroke="#D0D0D0" stroke-width="1.5" filter="url(#shadow)"/>
+  <!-- Coat body - right side -->
+  <path d="M295 280 Q305 280 310 300 L320 430 Q322 445 305 448 L230 455 Q220 455 220 445 L220 290 Q220 280 230 280 Z"
+        fill="url(#coatGrad)" stroke="#D0D0D0" stroke-width="1.5" filter="url(#shadow)"/>
+  <!-- Coat collar left -->
+  <path d="M155 260 Q140 268 130 285 L165 310 Q175 295 175 275 Z"
+        fill="#FFFFFF" stroke="#D0D0D0" stroke-width="1"/>
+  <!-- Coat collar right -->
+  <path d="M245 260 Q260 268 270 285 L235 310 Q225 295 225 275 Z"
+        fill="#FFFFFF" stroke="#D0D0D0" stroke-width="1"/>
+  <!-- Coat lapel line -->
+  <line x1="180" y1="290" x2="175" y2="450" stroke="#D8D8D8" stroke-width="1.5"/>
+  <line x1="220" y1="290" x2="225" y2="450" stroke="#D8D8D8" stroke-width="1.5"/>
+
+  <!-- Breast pocket -->
+  <rect x="228" y="310" width="30" height="22" rx="2" fill="none" stroke="#D0D0D0" stroke-width="1.2"/>
+  <!-- Pen in pocket -->
+  <rect x="240" y="303" width="4" height="14" rx="1.5" fill="#3B82F6"/>
+  <rect x="240" y="301" width="4" height="4" rx="1" fill="#1E40AF"/>
+
+  <!-- Coat buttons -->
+  <circle cx="200" cy="340" r="5" fill="#E8E8E8" stroke="#C0C0C0" stroke-width="1"/>
+  <circle cx="200" cy="370" r="5" fill="#E8E8E8" stroke="#C0C0C0" stroke-width="1"/>
+  <circle cx="200" cy="400" r="5" fill="#E8E8E8" stroke="#C0C0C0" stroke-width="1"/>
+
+  <!-- === ARMS === -->
+  <!-- Left arm -->
+  <path d="M98 295 Q60 330 65 380 Q68 400 85 395 Q100 390 105 370 L115 320"
+        fill="#C49A6C" stroke="#A07850" stroke-width="2"/>
+  <!-- Left paw -->
+  <ellipse cx="78" cy="390" rx="22" ry="18" fill="#D4A574" stroke="#A07850" stroke-width="2"/>
+  <ellipse cx="78" cy="390" rx="14" ry="11" fill="url(#lightFur)"/>
+
+  <!-- Right arm (waving!) -->
+  <path d="M302 295 Q340 280 350 240 Q355 220 340 218 Q325 220 315 245 L290 300"
+        fill="#C49A6C" stroke="#A07850" stroke-width="2"/>
+  <!-- Right paw -->
+  <ellipse cx="345" cy="228" rx="20" ry="18" fill="#D4A574" stroke="#A07850" stroke-width="2" transform="rotate(-15 345 228)"/>
+  <ellipse cx="345" cy="228" rx="13" ry="11" fill="url(#lightFur)" transform="rotate(-15 345 228)"/>
+
+  <!-- === FEET === -->
+  <!-- Left foot -->
+  <ellipse cx="155" cy="462" rx="38" ry="20" fill="#C49A6C" stroke="#A07850" stroke-width="2"/>
+  <ellipse cx="155" cy="465" rx="24" ry="12" fill="url(#lightFur)"/>
+  <!-- Right foot -->
+  <ellipse cx="245" cy="462" rx="38" ry="20" fill="#C49A6C" stroke="#A07850" stroke-width="2"/>
+  <ellipse cx="245" cy="465" rx="24" ry="12" fill="url(#lightFur)"/>
+
+  <!-- === HEAD === -->
+  <!-- Main head shape -->
+  <ellipse cx="200" cy="170" rx="90" ry="82" fill="url(#headGrad)" stroke="#A07850" stroke-width="2" filter="url(#shadow)"/>
+
+  <!-- Muzzle area -->
+  <ellipse cx="200" cy="200" rx="45" ry="32" fill="url(#lightFur)"/>
+
+  <!-- === GLASSES === -->
+  <!-- Left lens -->
+  <ellipse cx="168" cy="170" rx="30" ry="26" fill="#E8F4FD" fill-opacity="0.15" stroke="#4A4A4A" stroke-width="3"/>
+  <ellipse cx="168" cy="170" rx="30" ry="26" fill="url(#lensGrad)"/>
+  <!-- Right lens -->
+  <ellipse cx="232" cy="170" rx="30" ry="26" fill="#E8F4FD" fill-opacity="0.15" stroke="#4A4A4A" stroke-width="3"/>
+  <ellipse cx="232" cy="170" rx="30" ry="26" fill="url(#lensGrad)"/>
+  <!-- Bridge -->
+  <path d="M198 172 Q200 165 202 172" fill="none" stroke="#4A4A4A" stroke-width="3" stroke-linecap="round"/>
+  <!-- Left temple arm -->
+  <path d="M138 168 Q120 165 115 155" fill="none" stroke="#4A4A4A" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Right temple arm -->
+  <path d="M262 168 Q280 165 285 155" fill="none" stroke="#4A4A4A" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Lens shine -->
+  <ellipse cx="155" cy="160" rx="8" ry="5" fill="white" fill-opacity="0.4" transform="rotate(-20 155 160)"/>
+  <ellipse cx="219" cy="160" rx="8" ry="5" fill="white" fill-opacity="0.4" transform="rotate(-20 219 160)"/>
+
+  <!-- === EYES (behind glasses) === -->
+  <!-- Left eye -->
+  <ellipse cx="168" cy="172" rx="10" ry="11" fill="#2D1B0E"/>
+  <ellipse cx="165" cy="168" rx="4" ry="4.5" fill="white" fill-opacity="0.8"/>
+  <ellipse cx="172" cy="175" rx="2" ry="2" fill="white" fill-opacity="0.4"/>
+  <!-- Right eye -->
+  <ellipse cx="232" cy="172" rx="10" ry="11" fill="#2D1B0E"/>
+  <ellipse cx="229" cy="168" rx="4" ry="4.5" fill="white" fill-opacity="0.8"/>
+  <ellipse cx="236" cy="175" rx="2" ry="2" fill="white" fill-opacity="0.4"/>
+
+  <!-- Eyebrows (friendly, slightly raised) -->
+  <path d="M148 148 Q160 140 178 145" fill="none" stroke="#8B6342" stroke-width="3" stroke-linecap="round"/>
+  <path d="M222 145 Q240 140 252 148" fill="none" stroke="#8B6342" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- === NOSE === -->
+  <ellipse cx="200" cy="197" rx="10" ry="7" fill="#5C3D2E"/>
+  <ellipse cx="197" cy="195" rx="3" ry="2" fill="#7B5443" fill-opacity="0.6"/>
+
+  <!-- === MOUTH (cute smile) === -->
+  <path d="M188 210 Q194 220 200 220 Q206 220 212 210" fill="none" stroke="#5C3D2E" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- === CHEEK BLUSH === -->
+  <circle cx="142" cy="200" r="16" fill="url(#blush)"/>
+  <circle cx="258" cy="200" r="16" fill="url(#blush)"/>
+
+  <!-- === TUFT OF HEAD FUR === -->
+  <path d="M185 92 Q190 78 200 82 Q210 78 215 92" fill="#C49A6C" stroke="#B08656" stroke-width="1"/>
+  <path d="M178 97 Q183 86 192 90" fill="#C49A6C" stroke="#B08656" stroke-width="0.8"/>
+  <path d="M208 90 Q217 86 222 97" fill="#C49A6C" stroke="#B08656" stroke-width="0.8"/>
+
+  <!-- === NAME TAG ON COAT === -->
+  <rect x="118" y="305" width="48" height="20" rx="3" fill="white" stroke="#C0C0C0" stroke-width="1"/>
+  <text x="142" y="319" font-family="Arial, sans-serif" font-size="8" fill="#666" text-anchor="middle">Lably</text>
+</svg>
