@@ -791,3 +791,28 @@ body {
   background: #667eea;
   color: white;
 }
+
+/* Insert into Word button */
+.chat-insert-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 4px 10px;
+  background: transparent;
+  color: #888;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.chat-insert-btn:hover {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+.chat-insert-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

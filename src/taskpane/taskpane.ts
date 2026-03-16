@@ -1341,11 +1341,17 @@ class UIController {
       return;
     }
 
-    container.innerHTML = this.chatMessages.map((msg) => `
+    container.innerHTML = this.chatMessages.map((msg, idx) => `
       <div class="chat-message chat-message-${msg.role}">
         <div class="chat-bubble chat-bubble-${msg.role}">
           ${this.formatChatContent(msg.content)}
         </div>
+        ${msg.role === "assistant" && msg.content ? `
+          <button class="chat-insert-btn" data-msg-idx="${idx}" title="Insert into document">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            Insert into Word
+          </button>
+        ` : ""}
       </div>
     `).join("");
 
@@ -1372,6 +1378,40 @@ class UIController {
             input.value = action;
             this.sendChatMessage();
           }
+        }
+      });
+    });
+
+    // Wire up insert-into-Word buttons
+    container.querySelectorAll<HTMLButtonElement>(".chat-insert-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const idx = parseInt(btn.getAttribute("data-msg-idx") || "", 10);
+        const msg = this.chatMessages[idx];
+        if (!msg || msg.role !== "assistant" || !msg.content) return;
+
+        // Strip action tags and markdown for plain-text insertion
+        const plainText = msg.content
+          .replace(/\{\{action:.+?\}\}/g, "")
+          .replace(/\*\*(.+?)\*\*/g, "$1")
+          .replace(/\*(.+?)\*/g, "$1")
+          .replace(/`(.+?)`/g, "$1")
+          .trim();
+
+        if (!plainText) return;
+
+        btn.disabled = true;
+        const origHtml = btn.innerHTML;
+        btn.textContent = "Inserting...";
+        try {
+          await this.word.insertTextAtCursor(plainText);
+          btn.textContent = "Inserted!";
+          setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+          }, 2000);
+        } catch (err) {
+          btn.textContent = "Failed - try again";
+          btn.disabled = false;
         }
       });
     });
