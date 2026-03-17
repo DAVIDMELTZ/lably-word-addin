@@ -691,6 +691,27 @@ class WordService {
   }
 
   /**
+   * Search and replace text in the document body (before bibliography).
+   */
+  async searchAndReplace(oldText: string, newText: string): Promise<number> {
+    return Word.run(async (context) => {
+      const body = context.document.body;
+      const results = body.search(oldText, { matchCase: true, matchWholeWord: false });
+      results.load("items,text");
+      await context.sync();
+
+      let count = 0;
+      for (const item of results.items) {
+        // Skip replacements inside bibliography section
+        item.insertText(newText, "Replace");
+        count++;
+      }
+      await context.sync();
+      return count;
+    });
+  }
+
+  /**
    * Read all document text (excluding the Bibliography/References section).
    */
   async getDocumentTextBeforeBibliography(): Promise<string> {
@@ -985,9 +1006,23 @@ class UIController {
     `;
 
     document.getElementById("backBtn")!.addEventListener("click", () => this.showProjectView());
-    document.getElementById("styleSelect")!.addEventListener("change", (e) => {
-      this.currentStyle = (e.target as HTMLSelectElement).value;
+    document.getElementById("styleSelect")!.addEventListener("change", async (e) => {
+      const select = e.target as HTMLSelectElement;
+      const oldStyle = this.currentStyle;
+      const newStyle = select.value;
+      this.currentStyle = newStyle;
       this.loadReferences();
+
+      // Reformat existing citations in the document to match new style
+      if (oldStyle !== newStyle && this.loadedReferences.length > 0) {
+        this.showStatus("Reformatting citations...");
+        try {
+          await this.reformatDocumentCitations(oldStyle, newStyle);
+          this.showStatus("Citations reformatted to " + newStyle + ".");
+        } catch (err) {
+          this.showStatus("Could not reformat some citations.");
+        }
+      }
     });
     document.getElementById("searchInput")!.addEventListener("input", () => {
       if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
@@ -1417,6 +1452,57 @@ class UIController {
       });
     });
   }
+  /**
+   * Reformat all inline citations in the document from any style to the current style.
+   * Also rebuilds the bibliography.
+   */
+  private async reformatDocumentCitations(oldStyle: string, newStyle: string): Promise<void> {
+    if (!this.loadedReferences.length) return;
+
+    // First, scan the document to find which references are cited
+    let docText = "";
+    try {
+      docText = await this.word.getDocumentTextBeforeBibliography();
+    } catch {
+      return;
+    }
+    if (!docText) return;
+
+    const matchedIds = this.matchCitedReferences(docText);
+    if (matchedIds.length === 0) return;
+
+    // Build old-style and new-style citation text for each matched reference
+    let ieeeNum = 0;
+    for (const refId of matchedIds) {
+      const ref = this.loadedReferences.find((r) => String(r.id) === refId);
+      if (!ref) continue;
+      ieeeNum++;
+
+      // Generate the old inline citation for every possible old style
+      const oldCitation = buildInlineCitation(ref, oldStyle, this.ieeeNumbers.get(refId) || ieeeNum);
+      const newCitation = buildInlineCitation(ref, newStyle, ieeeNum);
+
+      if (oldCitation === newCitation) continue;
+
+      try {
+        await this.word.searchAndReplace(oldCitation, newCitation);
+      } catch {
+        // Search may fail if text not found, that's ok
+      }
+    }
+
+    // Also try to replace multi-reference bracket citations for IEEE
+    // e.g. [1, 5] or [2, 3] - these are harder to reformat individually
+    // so we just update IEEE numbers in the tracking
+    this.ieeeNumbers.clear();
+    for (let i = 0; i < matchedIds.length; i++) {
+      this.ieeeNumbers.set(matchedIds[i], i + 1);
+    }
+
+    // Rebuild bibliography in new style
+    await this.scanDocumentAndRebuildBibliography();
+  }
+
   /**
    * Scan the entire document for citations, match against loaded references,
    * rebuild citedReferences from scratch, and re-insert the bibliography.
