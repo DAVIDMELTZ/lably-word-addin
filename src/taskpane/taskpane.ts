@@ -1474,16 +1474,18 @@ class UIController {
         .map(([id, ref]) => getBibEntry(ref, this.currentStyle, this.ieeeNumbers.get(id)));
     }
 
-    // Deduplicate
-    bibEntries = [...new Set(bibEntries)];
+    // Deduplicate and decode any HTML entities
+    bibEntries = [...new Set(bibEntries)].map(e =>
+      e.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    );
 
     await this.word.insertOrUpdateBibliography(bibEntries);
     return bibEntries.length;
   }
 
   /**
-   * Scan AI response text for citation patterns and match against loaded project references.
-   * Returns an array of reference IDs that appear to be cited in the text.
+   * Scan text for citation patterns and match against loaded project references.
+   * Handles: numbered [1], [2, 3], [1-5], author-year (Smith, 2023), and title matching.
    */
   private matchCitedReferences(text: string): string[] {
     if (!this.loadedReferences.length) return [];
@@ -1491,7 +1493,41 @@ class UIController {
     const matchedIds: Set<string> = new Set();
     const lowerText = text.toLowerCase();
 
+    // ---- Strategy 1: Numbered bracket citations [1], [2, 3], [1-5], [1, 4] ----
+    const bracketPattern = /\[(\d[\d,\s\-]*)\]/g;
+    const citedNumbers: Set<number> = new Set();
+    let bracketMatch;
+    while ((bracketMatch = bracketPattern.exec(text)) !== null) {
+      const inner = bracketMatch[1];
+      // Handle ranges like "1-5" and lists like "1, 3, 5"
+      for (const part of inner.split(",")) {
+        const trimmed = part.trim();
+        if (trimmed.includes("-")) {
+          const [start, end] = trimmed.split("-").map(s => parseInt(s.trim(), 10));
+          if (!isNaN(start) && !isNaN(end)) {
+            for (let n = start; n <= end && n <= this.loadedReferences.length; n++) {
+              citedNumbers.add(n);
+            }
+          }
+        } else {
+          const num = parseInt(trimmed, 10);
+          if (!isNaN(num) && num >= 1 && num <= this.loadedReferences.length) {
+            citedNumbers.add(num);
+          }
+        }
+      }
+    }
+
+    // Map 1-based numbers to loaded references (by their order in the list)
+    for (const num of citedNumbers) {
+      const ref = this.loadedReferences[num - 1];
+      if (ref) matchedIds.add(String(ref.id));
+    }
+
+    // ---- Strategy 2: Author name + year matching ----
     for (const ref of this.loadedReferences) {
+      if (matchedIds.has(String(ref.id))) continue; // already matched
+
       const authors = extractAuthors(ref.authors);
       if (authors.length === 0) continue;
 
@@ -1499,25 +1535,51 @@ class UIController {
       if (!lastName || lastName === "Unknown") continue;
 
       const lowerName = lastName.toLowerCase();
+      if (lowerName.length < 3) continue; // skip very short names to avoid false matches
+
       const year = ref.year ? String(ref.year) : null;
 
-      // Check if the author's last name appears in the text
-      const nameIdx = lowerText.indexOf(lowerName);
-      if (nameIdx === -1) continue;
+      // Search for all occurrences of the author name in text
+      let searchFrom = 0;
+      while (searchFrom < lowerText.length) {
+        const nameIdx = lowerText.indexOf(lowerName, searchFrom);
+        if (nameIdx === -1) break;
+        searchFrom = nameIdx + lowerName.length;
 
-      // If we have a year, check if name and year appear near each other (within 50 chars)
-      if (year) {
-        const yearIdx = lowerText.indexOf(year, Math.max(0, nameIdx - 50));
-        if (yearIdx !== -1 && Math.abs(yearIdx - nameIdx) < 50) {
+        // Name + year near each other
+        if (year) {
+          const nearby = lowerText.substring(Math.max(0, nameIdx - 10), nameIdx + lowerName.length + 40);
+          if (nearby.includes(year)) {
+            matchedIds.add(String(ref.id));
+            break;
+          }
+        }
+
+        // Name inside parentheses
+        const before = text.lastIndexOf("(", nameIdx);
+        const after = text.indexOf(")", nameIdx);
+        if (before !== -1 && after !== -1 && (nameIdx - before) < 30 && (after - nameIdx) < 50) {
           matchedIds.add(String(ref.id));
-          continue;
+          break;
         }
       }
+    }
 
-      // Check if name appears inside parentheses: (Name...) - common for all styles
-      const before = text.lastIndexOf("(", nameIdx);
-      const after = text.indexOf(")", nameIdx);
-      if (before !== -1 && after !== -1 && (nameIdx - before) < 30 && (after - nameIdx) < 50) {
+    // ---- Strategy 3: Title keyword matching (for references not yet matched) ----
+    for (const ref of this.loadedReferences) {
+      if (matchedIds.has(String(ref.id))) continue;
+      if (!ref.title) continue;
+
+      // Extract significant words from title (skip short/common words)
+      const stopWords = new Set(["the", "a", "an", "of", "in", "on", "for", "and", "or", "to", "is", "are", "was", "were", "with", "by", "from", "at", "its", "this", "that", "as", "it"]);
+      const titleWords = ref.title.toLowerCase().split(/\W+/).filter(w => w.length > 4 && !stopWords.has(w));
+
+      if (titleWords.length === 0) continue;
+
+      // If enough significant title words appear in the text, consider it cited
+      const matchCount = titleWords.filter(w => lowerText.includes(w)).length;
+      const threshold = Math.max(2, Math.ceil(titleWords.length * 0.4));
+      if (matchCount >= threshold) {
         matchedIds.add(String(ref.id));
       }
     }
