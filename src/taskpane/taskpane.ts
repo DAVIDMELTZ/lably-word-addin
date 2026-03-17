@@ -690,58 +690,7 @@ class WordService {
     });
   }
 
-  /**
-   * Search and replace text in the document body (before bibliography).
-   */
-  async searchAndReplace(oldText: string, newText: string): Promise<number> {
-    return Word.run(async (context) => {
-      const body = context.document.body;
-      const results = body.search(oldText, { matchCase: true, matchWholeWord: false });
-      results.load("items,text");
-      await context.sync();
 
-      let count = 0;
-      for (const item of results.items) {
-        // Skip replacements inside bibliography section
-        item.insertText(newText, "Replace");
-        count++;
-      }
-      await context.sync();
-      return count;
-    });
-  }
-
-  /**
-   * Read all document text (excluding the Bibliography section we generate).
-   * Keeps the AI's "References" section intact for citation number mapping.
-   */
-  async getDocumentTextBeforeBibliography(): Promise<string> {
-    return Word.run(async (context) => {
-      const body = context.document.body;
-      body.load("text");
-      await context.sync();
-
-      let fullText = body.text || "";
-
-      // Strip everything from our Bibliography heading onwards
-      // NOTE: Only strip "Bibliography" (our heading), NOT "References"
-      // because the AI's "References" section is content we need to keep
-      // for mapping numbered citations [1], [2] to actual references
-      const bibPatterns = [
-        /\nBibliography\n/i,
-        /\nBibliography$/im,
-      ];
-      for (const pattern of bibPatterns) {
-        const match = fullText.match(pattern);
-        if (match && match.index !== undefined) {
-          fullText = fullText.substring(0, match.index);
-          break;
-        }
-      }
-
-      return fullText.trim();
-    });
-  }
 
 }
 
@@ -1012,29 +961,15 @@ class UIController {
         <div class="action-bar">
           <button id="insertInlineBtn" class="btn btn-primary" disabled>Insert Citation</button>
           <button id="insertBibBtn" class="btn btn-secondary" disabled>Insert Bibliography</button>
-          <button id="refreshBibBtn" class="btn btn-secondary btn-small">Refresh Bibliography</button>
         </div>
       </div>
     `;
 
     document.getElementById("backBtn")!.addEventListener("click", () => this.showProjectView());
-    document.getElementById("styleSelect")!.addEventListener("change", async (e) => {
+    document.getElementById("styleSelect")!.addEventListener("change", (e) => {
       const select = e.target as HTMLSelectElement;
-      const oldStyle = this.currentStyle;
-      const newStyle = select.value;
-      this.currentStyle = newStyle;
+      this.currentStyle = select.value;
       this.loadReferences();
-
-      // Reformat existing citations in the document to match new style
-      if (oldStyle !== newStyle && this.loadedReferences.length > 0) {
-        this.showStatus("Reformatting citations...");
-        try {
-          await this.reformatDocumentCitations(oldStyle, newStyle);
-          this.showStatus("Citations reformatted to " + newStyle + ".");
-        } catch (err) {
-          this.showStatus("Could not reformat some citations.");
-        }
-      }
     });
     document.getElementById("searchInput")!.addEventListener("input", () => {
       if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
@@ -1042,23 +977,6 @@ class UIController {
     });
     document.getElementById("insertInlineBtn")!.addEventListener("click", () => this.insertSelectedCitations());
     document.getElementById("insertBibBtn")!.addEventListener("click", () => this.insertBibliographyOnly());
-    document.getElementById("refreshBibBtn")!.addEventListener("click", async () => {
-      const btn = document.getElementById("refreshBibBtn") as HTMLButtonElement;
-      if (btn) { btn.disabled = true; btn.textContent = "Scanning..."; }
-      try {
-        if (!this.loadedReferences.length) {
-          this.showStatus("References not loaded yet. Please wait for references to load.");
-          return;
-        }
-        const count = await this.scanDocumentAndRebuildBibliography();
-        this.showStatus(count > 0 ? `Bibliography refreshed with ${count} entries.` : "No citations found. Make sure the document has [1], [2] or (Author, Year) citations.");
-      } catch (err) {
-        console.error("[Lably] Refresh bibliography error:", err);
-        this.showStatus("Failed to refresh bibliography: " + (err instanceof Error ? err.message : "Unknown error"));
-      } finally {
-        if (btn) { btn.disabled = false; btn.textContent = "Refresh Bibliography"; }
-      }
-    });
 
     this.renderChatToggle();
     this.loadReferences();
@@ -1211,8 +1129,40 @@ class UIController {
         }
       }
 
-      // ---- Step 3: Scan full document and rebuild bibliography ----
-      const bibCount = await this.scanDocumentAndRebuildBibliography();
+      // ---- Step 3: Update bibliography with cited references ----
+      for (const refId of refIds) {
+        const ref = this.loadedReferences.find((r) => String(r.id) === refId);
+        if (ref) this.citedReferences.set(String(ref.id), ref);
+      }
+
+      let bibEntries: string[] = [];
+      if (this.currentProject) {
+        try {
+          const allCitedIds = Array.from(this.citedReferences.keys());
+          const bibRaw = await this.api.getBibliography(this.currentProject.id, allCitedIds, this.currentStyle);
+          const bibArr = extractArray(bibRaw);
+          if (bibArr.length > 0) {
+            bibEntries = bibArr.map((entry: any) => {
+              if (typeof entry === "string") return entry;
+              if (entry.bibliography) return String(entry.bibliography);
+              if (entry.formatted) return String(entry.formatted);
+              if (entry.text) return String(entry.text);
+              return String(entry);
+            });
+          }
+        } catch {
+          // Backend unavailable
+        }
+      }
+      if (bibEntries.length === 0) {
+        bibEntries = Array.from(this.citedReferences.entries())
+          .map(([id, ref]) => getBibEntry(ref, this.currentStyle, this.ieeeNumbers.get(id)));
+      }
+      bibEntries = [...new Set(bibEntries)].map(e =>
+        e.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      );
+      await this.word.insertOrUpdateBibliography(bibEntries);
+      const bibCount = bibEntries.length;
 
       if (insertSuccess) {
         this.showStatus(`Inserted ${refIds.length} citation(s) and updated bibliography (${bibCount} entries).`);
@@ -1463,244 +1413,6 @@ class UIController {
         }
       });
     });
-  }
-  /**
-   * Reformat all inline citations in the document from any style to the current style.
-   * Also rebuilds the bibliography.
-   */
-  private async reformatDocumentCitations(oldStyle: string, newStyle: string): Promise<void> {
-    if (!this.loadedReferences.length) return;
-
-    // First, scan the document to find which references are cited
-    let docText = "";
-    try {
-      docText = await this.word.getDocumentTextBeforeBibliography();
-    } catch {
-      return;
-    }
-    if (!docText) return;
-
-    const matchedIds = this.matchCitedReferences(docText);
-    if (matchedIds.length === 0) return;
-
-    // Build old-style and new-style citation text for each matched reference
-    let ieeeNum = 0;
-    for (const refId of matchedIds) {
-      const ref = this.loadedReferences.find((r) => String(r.id) === refId);
-      if (!ref) continue;
-      ieeeNum++;
-
-      // Generate the old inline citation for every possible old style
-      const oldCitation = buildInlineCitation(ref, oldStyle, this.ieeeNumbers.get(refId) || ieeeNum);
-      const newCitation = buildInlineCitation(ref, newStyle, ieeeNum);
-
-      if (oldCitation === newCitation) continue;
-
-      try {
-        await this.word.searchAndReplace(oldCitation, newCitation);
-      } catch {
-        // Search may fail if text not found, that's ok
-      }
-    }
-
-    // Also try to replace multi-reference bracket citations for IEEE
-    // e.g. [1, 5] or [2, 3] - these are harder to reformat individually
-    // so we just update IEEE numbers in the tracking
-    this.ieeeNumbers.clear();
-    for (let i = 0; i < matchedIds.length; i++) {
-      this.ieeeNumbers.set(matchedIds[i], i + 1);
-    }
-
-    // Rebuild bibliography in new style
-    await this.scanDocumentAndRebuildBibliography();
-  }
-
-  /**
-   * Scan the entire document for citations, match against loaded references,
-   * rebuild citedReferences from scratch, and re-insert the bibliography.
-   */
-  private async scanDocumentAndRebuildBibliography(): Promise<number> {
-    if (!this.loadedReferences.length) {
-      this.showStatus("No references loaded.");
-      return 0;
-    }
-
-    let docText = "";
-    try {
-      docText = await this.word.getDocumentTextBeforeBibliography();
-    } catch (err) {
-      this.showStatus("Error reading document: " + (err instanceof Error ? err.message : String(err)));
-      return 0;
-    }
-    if (!docText) {
-      this.showStatus("Could not read document text (empty).");
-      return 0;
-    }
-
-    // Clear and rebuild from scratch based on actual document content
-    this.citedReferences.clear();
-    this.ieeeNumbers.clear();
-
-    const matchedIds = this.matchCitedReferences(docText);
-    for (const refId of matchedIds) {
-      const ref = this.loadedReferences.find((r) => String(r.id) === refId);
-      if (ref) {
-        this.citedReferences.set(String(ref.id), ref);
-        if (!this.ieeeNumbers.has(refId)) {
-          this.ieeeNumbers.set(refId, this.ieeeNumbers.size + 1);
-        }
-      }
-    }
-
-    if (this.citedReferences.size === 0) return 0;
-
-    let bibEntries: string[] = [];
-    if (this.currentProject) {
-      try {
-        const allCitedIds = Array.from(this.citedReferences.keys());
-        const bibRaw = await this.api.getBibliography(this.currentProject.id, allCitedIds, this.currentStyle);
-        const bibArr = extractArray(bibRaw);
-        if (bibArr.length > 0) {
-          bibEntries = bibArr.map((entry: any) => {
-            if (typeof entry === "string") return entry;
-            if (entry.bibliography) return String(entry.bibliography);
-            if (entry.formatted) return String(entry.formatted);
-            if (entry.text) return String(entry.text);
-            return String(entry);
-          });
-        }
-      } catch {
-        // Backend unavailable
-      }
-    }
-
-    if (bibEntries.length === 0) {
-      bibEntries = Array.from(this.citedReferences.entries())
-        .map(([id, ref]) => getBibEntry(ref, this.currentStyle, this.ieeeNumbers.get(id)));
-    }
-
-    // Deduplicate and decode any HTML entities
-    bibEntries = [...new Set(bibEntries)].map(e =>
-      e.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    );
-
-    await this.word.insertOrUpdateBibliography(bibEntries);
-    return bibEntries.length;
-  }
-
-  /**
-   * Scan text for citation patterns and match against loaded project references.
-   * Handles numbered [1], [2, 3] citations by parsing a reference list from the
-   * text (e.g. the AI's "References" section) to map numbers to actual references.
-   * Also matches author-year citation patterns like (Smith, 2023).
-   */
-  private matchCitedReferences(text: string): string[] {
-    if (!this.loadedReferences.length) return [];
-
-    const matchedIds: Set<string> = new Set();
-    const lowerText = text.toLowerCase();
-
-    // ---- Strategy 1: Parse numbered reference list from text ----
-    // Look for lines like "[1] O'Hearn A. Can a carnivore..." or "1. Palmer RD. ..."
-    // and match them to loadedReferences by author last name
-    const refListPattern = /\[(\d+)\]\s*(.+)/g;
-    const numberToRefId: Map<number, string> = new Map();
-    let refMatch;
-    while ((refMatch = refListPattern.exec(text)) !== null) {
-      const num = parseInt(refMatch[1], 10);
-      const entryText = refMatch[2].trim().toLowerCase();
-
-      // Try to match this entry to a loaded reference by author last name
-      for (const ref of this.loadedReferences) {
-        const authors = extractAuthors(ref.authors);
-        if (authors.length === 0) continue;
-        const lastName = authors[0].last;
-        if (!lastName || lastName.length < 3) continue;
-
-        // Check if the reference list entry starts with or contains the author name
-        if (entryText.includes(lastName.toLowerCase())) {
-          numberToRefId.set(num, String(ref.id));
-          break;
-        }
-      }
-    }
-
-    // ---- Strategy 2: Extract cited numbers from bracket citations in body text ----
-    const bracketPattern = /\[(\d[\d,\s\-]*)\]/g;
-    const citedNumbers: Set<number> = new Set();
-    let bracketMatch;
-    while ((bracketMatch = bracketPattern.exec(text)) !== null) {
-      const inner = bracketMatch[1];
-      for (const part of inner.split(",")) {
-        const trimmed = part.trim();
-        if (trimmed.includes("-")) {
-          const [start, end] = trimmed.split("-").map(s => parseInt(s.trim(), 10));
-          if (!isNaN(start) && !isNaN(end)) {
-            for (let n = start; n <= Math.min(end, 50); n++) {
-              citedNumbers.add(n);
-            }
-          }
-        } else {
-          const num = parseInt(trimmed, 10);
-          if (!isNaN(num) && num >= 1) {
-            citedNumbers.add(num);
-          }
-        }
-      }
-    }
-
-    // Map cited numbers using the parsed reference list
-    if (numberToRefId.size > 0) {
-      // We have a reference list — use it for mapping
-      for (const num of citedNumbers) {
-        const refId = numberToRefId.get(num);
-        if (refId) matchedIds.add(refId);
-      }
-    } else {
-      // No reference list found — fall back to loadedReferences order
-      for (const num of citedNumbers) {
-        if (num <= this.loadedReferences.length) {
-          const ref = this.loadedReferences[num - 1];
-          if (ref) matchedIds.add(String(ref.id));
-        }
-      }
-    }
-
-    // ---- Strategy 3: Author name in explicit citation context ----
-    for (const ref of this.loadedReferences) {
-      if (matchedIds.has(String(ref.id))) continue;
-
-      const authors = extractAuthors(ref.authors);
-      if (authors.length === 0) continue;
-
-      const lastName = authors[0].last;
-      if (!lastName || lastName === "Unknown" || lastName.length < 3) continue;
-
-      const lowerName = lastName.toLowerCase();
-      const year = ref.year ? String(ref.year) : null;
-      if (!year) continue;
-
-      let searchFrom = 0;
-      while (searchFrom < lowerText.length) {
-        const nameIdx = lowerText.indexOf(lowerName, searchFrom);
-        if (nameIdx === -1) break;
-        searchFrom = nameIdx + lowerName.length;
-
-        const windowStart = Math.max(0, nameIdx - 15);
-        const windowEnd = Math.min(lowerText.length, nameIdx + lowerName.length + 45);
-        const window = lowerText.substring(windowStart, windowEnd);
-
-        if (!window.includes(year)) continue;
-
-        const textWindow = text.substring(windowStart, windowEnd);
-        if (textWindow.includes("(") || textWindow.includes(")")) {
-          matchedIds.add(String(ref.id));
-          break;
-        }
-      }
-    }
-
-    return Array.from(matchedIds);
   }
 
   private formatChatContent(content: string): string {
