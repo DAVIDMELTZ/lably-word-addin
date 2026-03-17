@@ -1452,23 +1452,7 @@ class UIController {
         btn.textContent = "Inserting...";
         try {
           await this.word.insertTextAtCursor(plainText);
-
-          // Match references from the AI response (which has the reference list)
-          // then scan the document and rebuild bibliography
-          const aiRefIds = this.matchCitedReferences(msg.content);
-          for (const refId of aiRefIds) {
-            const ref = this.loadedReferences.find((r) => String(r.id) === refId);
-            if (ref) {
-              this.citedReferences.set(String(ref.id), ref);
-              if (!this.ieeeNumbers.has(refId)) {
-                this.ieeeNumbers.set(refId, this.ieeeNumbers.size + 1);
-              }
-            }
-          }
-          const bibCount = await this.scanDocumentAndRebuildBibliography();
-
-          const bibNote = bibCount > 0 ? ` (${bibCount} ref(s) in bibliography)` : "";
-          btn.textContent = "Inserted!" + bibNote;
+          btn.textContent = "Inserted!";
           setTimeout(() => {
             btn.disabled = false;
             btn.innerHTML = origHtml;
