@@ -1571,7 +1571,8 @@ class UIController {
 
   /**
    * Scan text for citation patterns and match against loaded project references.
-   * Handles: numbered [1], [2, 3], [1-5], author-year (Smith, 2023), and title matching.
+   * Strategy 1: Numbered bracket citations [1], [2, 3], [1-5]
+   * Strategy 2: Author name in explicit citation context (with year or in parentheses)
    */
   private matchCitedReferences(text: string): string[] {
     if (!this.loadedReferences.length) return [];
@@ -1585,7 +1586,6 @@ class UIController {
     let bracketMatch;
     while ((bracketMatch = bracketPattern.exec(text)) !== null) {
       const inner = bracketMatch[1];
-      // Handle ranges like "1-5" and lists like "1, 3, 5"
       for (const part of inner.split(",")) {
         const trimmed = part.trim();
         if (trimmed.includes("-")) {
@@ -1604,69 +1604,48 @@ class UIController {
       }
     }
 
-    // Map 1-based numbers to loaded references (by their order in the list)
     for (const num of citedNumbers) {
       const ref = this.loadedReferences[num - 1];
       if (ref) matchedIds.add(String(ref.id));
     }
 
-    // ---- Strategy 2: Author name + year matching ----
+    // ---- Strategy 2: Author name in explicit citation context ----
+    // Only match when the name appears directly in a citation pattern:
+    //   (Author, Year), (Author Year), (Author et al., Year), Author (Year)
+    // NOT when the name just appears in running text.
     for (const ref of this.loadedReferences) {
-      if (matchedIds.has(String(ref.id))) continue; // already matched
+      if (matchedIds.has(String(ref.id))) continue;
 
       const authors = extractAuthors(ref.authors);
       if (authors.length === 0) continue;
 
       const lastName = authors[0].last;
-      if (!lastName || lastName === "Unknown") continue;
+      if (!lastName || lastName === "Unknown" || lastName.length < 3) continue;
 
       const lowerName = lastName.toLowerCase();
-      if (lowerName.length < 3) continue; // skip very short names to avoid false matches
-
       const year = ref.year ? String(ref.year) : null;
+      if (!year) continue; // require year for author-based matching to avoid false positives
 
-      // Search for all occurrences of the author name in text
       let searchFrom = 0;
       while (searchFrom < lowerText.length) {
         const nameIdx = lowerText.indexOf(lowerName, searchFrom);
         if (nameIdx === -1) break;
         searchFrom = nameIdx + lowerName.length;
 
-        // Name + year near each other
-        if (year) {
-          const nearby = lowerText.substring(Math.max(0, nameIdx - 10), nameIdx + lowerName.length + 40);
-          if (nearby.includes(year)) {
-            matchedIds.add(String(ref.id));
-            break;
-          }
-        }
+        // Check: is this name in a citation context?
+        // Look at the surrounding 60 chars for year + parenthetical pattern
+        const windowStart = Math.max(0, nameIdx - 15);
+        const windowEnd = Math.min(lowerText.length, nameIdx + lowerName.length + 45);
+        const window = lowerText.substring(windowStart, windowEnd);
 
-        // Name inside parentheses
-        const before = text.lastIndexOf("(", nameIdx);
-        const after = text.indexOf(")", nameIdx);
-        if (before !== -1 && after !== -1 && (nameIdx - before) < 30 && (after - nameIdx) < 50) {
+        if (!window.includes(year)) continue;
+
+        // Must also have parentheses nearby to confirm citation context
+        const textWindow = text.substring(windowStart, windowEnd);
+        if (textWindow.includes("(") || textWindow.includes(")")) {
           matchedIds.add(String(ref.id));
           break;
         }
-      }
-    }
-
-    // ---- Strategy 3: Title keyword matching (for references not yet matched) ----
-    for (const ref of this.loadedReferences) {
-      if (matchedIds.has(String(ref.id))) continue;
-      if (!ref.title) continue;
-
-      // Extract significant words from title (skip short/common words)
-      const stopWords = new Set(["the", "a", "an", "of", "in", "on", "for", "and", "or", "to", "is", "are", "was", "were", "with", "by", "from", "at", "its", "this", "that", "as", "it"]);
-      const titleWords = ref.title.toLowerCase().split(/\W+/).filter(w => w.length > 4 && !stopWords.has(w));
-
-      if (titleWords.length === 0) continue;
-
-      // If enough significant title words appear in the text, consider it cited
-      const matchCount = titleWords.filter(w => lowerText.includes(w)).length;
-      const threshold = Math.max(2, Math.ceil(titleWords.length * 0.4));
-      if (matchCount >= threshold) {
-        matchedIds.add(String(ref.id));
       }
     }
 
