@@ -1345,13 +1345,12 @@ class UIController {
       <div class="chat-message chat-message-${msg.role}">
         <div class="chat-bubble chat-bubble-${msg.role}">
           ${this.formatChatContent(msg.content)}
+          ${msg.role === "assistant" && msg.content ? `
+            <div class="chat-insert-row">
+              <button class="chat-insert-btn" data-msg-idx="${idx}">Insert into document</button>
+            </div>
+          ` : ""}
         </div>
-        ${msg.role === "assistant" && msg.content ? `
-          <button class="chat-insert-btn" data-msg-idx="${idx}" title="Insert into document">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-            Insert into Word
-          </button>
-        ` : ""}
       </div>
     `).join("");
 

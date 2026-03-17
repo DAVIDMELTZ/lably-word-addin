@@ -792,27 +792,26 @@ body {
   color: white;
 }
 
-/* Insert into Word button */
+/* Insert into document link */
+.chat-insert-row {
+  margin-top: 6px;
+  padding-top: 4px;
+}
 .chat-insert-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 4px;
-  padding: 4px 10px;
-  background: transparent;
-  color: #888;
-  border: 1px solid #ddd;
-  border-radius: 12px;
-  font-size: 11px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: #999;
+  font-size: 10px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  text-decoration: underline;
+  transition: color 0.15s ease;
 }
 .chat-insert-btn:hover {
-  background: #667eea;
-  color: white;
-  border-color: #667eea;
+  color: #667eea;
 }
 .chat-insert-btn:disabled {
   opacity: 0.6;
   cursor: default;
+  text-decoration: none;
 }
