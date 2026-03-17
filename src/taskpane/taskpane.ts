@@ -690,6 +690,26 @@ class WordService {
     });
   }
 
+  /**
+   * Read all document text (excluding the Bibliography/References section).
+   */
+  async getDocumentTextBeforeBibliography(): Promise<string> {
+    return Word.run(async (context) => {
+      const paragraphs = context.document.body.paragraphs;
+      paragraphs.load("items,text");
+      await context.sync();
+
+      const parts: string[] = [];
+      for (const p of paragraphs.items) {
+        const t = (p.text || "").trim();
+        const lower = t.toLowerCase();
+        if (lower === "bibliography" || lower === "references") break;
+        if (t) parts.push(t);
+      }
+      return parts.join("\n");
+    });
+  }
+
 }
 
 // ============================================================================
@@ -959,6 +979,7 @@ class UIController {
         <div class="action-bar">
           <button id="insertInlineBtn" class="btn btn-primary" disabled>Insert Citation</button>
           <button id="insertBibBtn" class="btn btn-secondary" disabled>Insert Bibliography</button>
+          <button id="refreshBibBtn" class="btn btn-secondary btn-small">Refresh Bibliography</button>
         </div>
       </div>
     `;
@@ -974,6 +995,18 @@ class UIController {
     });
     document.getElementById("insertInlineBtn")!.addEventListener("click", () => this.insertSelectedCitations());
     document.getElementById("insertBibBtn")!.addEventListener("click", () => this.insertBibliographyOnly());
+    document.getElementById("refreshBibBtn")!.addEventListener("click", async () => {
+      const btn = document.getElementById("refreshBibBtn") as HTMLButtonElement;
+      if (btn) { btn.disabled = true; btn.textContent = "Scanning..."; }
+      try {
+        const count = await this.scanDocumentAndRebuildBibliography();
+        this.showStatus(count > 0 ? `Bibliography refreshed with ${count} entries.` : "No citations found in document.");
+      } catch (err) {
+        this.showStatus("Failed to refresh bibliography.");
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = "Refresh Bibliography"; }
+      }
+    });
 
     this.renderChatToggle();
     this.loadReferences();
@@ -1126,47 +1159,11 @@ class UIController {
         }
       }
 
-      // ---- Step 3: Track cited references ----
-      for (const refId of refIds) {
-        const ref = this.loadedReferences.find((r) => String(r.id) === refId);
-        if (ref) this.citedReferences.set(String(ref.id), ref);
-      }
-
-      // ---- Step 4: Auto-update bibliography ----
-      if (this.citedReferences.size > 0) {
-        let bibEntries: string[] = [];
-
-        // Try backend bibliography API first
-        if (this.currentProject) {
-          try {
-            const allCitedIds = Array.from(this.citedReferences.keys());
-            const bibRaw = await this.api.getBibliography(this.currentProject.id, allCitedIds, this.currentStyle);
-            const bibArr = extractArray(bibRaw);
-            if (bibArr.length > 0) {
-              bibEntries = bibArr.map((entry: any) => {
-                if (typeof entry === "string") return entry;
-                if (entry.bibliography) return String(entry.bibliography);
-                if (entry.formatted) return String(entry.formatted);
-                if (entry.text) return String(entry.text);
-                return String(entry);
-              });
-            }
-          } catch {
-            // Backend bibliography API unavailable — fall through to local
-          }
-        }
-
-        // Fallback: build locally from formatted_* fields or local rules
-        if (bibEntries.length === 0) {
-          bibEntries = Array.from(this.citedReferences.entries())
-            .map(([id, ref]) => getBibEntry(ref, this.currentStyle, this.ieeeNumbers.get(id)));
-        }
-
-        await this.word.insertOrUpdateBibliography(bibEntries);
-      }
+      // ---- Step 3: Scan full document and rebuild bibliography ----
+      const bibCount = await this.scanDocumentAndRebuildBibliography();
 
       if (insertSuccess) {
-        this.showStatus(`Inserted ${refIds.length} citation(s) and updated bibliography.`);
+        this.showStatus(`Inserted ${refIds.length} citation(s) and updated bibliography (${bibCount} entries).`);
       }
 
       this.selectedReferences.clear();
@@ -1404,47 +1401,10 @@ class UIController {
         try {
           await this.word.insertTextAtCursor(plainText);
 
-          // Auto-detect cited references and update bibliography
-          const citedRefIds = this.matchCitedReferences(plainText);
-          if (citedRefIds.length > 0) {
-            for (const refId of citedRefIds) {
-              const ref = this.loadedReferences.find((r) => String(r.id) === refId);
-              if (ref) this.citedReferences.set(String(ref.id), ref);
-              if (!this.ieeeNumbers.has(refId)) {
-                this.ieeeNumbers.set(refId, this.ieeeNumbers.size + 1);
-              }
-            }
+          // Scan full document for citations and rebuild bibliography
+          const bibCount = await this.scanDocumentAndRebuildBibliography();
 
-            // Build and insert/update bibliography
-            let bibEntries: string[] = [];
-            if (this.currentProject) {
-              try {
-                const allCitedIds = Array.from(this.citedReferences.keys());
-                const bibRaw = await this.api.getBibliography(this.currentProject.id, allCitedIds, this.currentStyle);
-                const bibArr = extractArray(bibRaw);
-                if (bibArr.length > 0) {
-                  bibEntries = bibArr.map((entry: any) => {
-                    if (typeof entry === "string") return entry;
-                    if (entry.bibliography) return String(entry.bibliography);
-                    if (entry.formatted) return String(entry.formatted);
-                    if (entry.text) return String(entry.text);
-                    return String(entry);
-                  });
-                }
-              } catch {
-                // Backend bibliography API unavailable
-              }
-            }
-
-            if (bibEntries.length === 0) {
-              bibEntries = Array.from(this.citedReferences.entries())
-                .map(([id, ref]) => getBibEntry(ref, this.currentStyle, this.ieeeNumbers.get(id)));
-            }
-
-            await this.word.insertOrUpdateBibliography(bibEntries);
-          }
-
-          const bibNote = citedRefIds.length > 0 ? ` (${citedRefIds.length} ref(s) added to bibliography)` : "";
+          const bibNote = bibCount > 0 ? ` (${bibCount} ref(s) in bibliography)` : "";
           btn.textContent = "Inserted!" + bibNote;
           setTimeout(() => {
             btn.disabled = false;
@@ -1457,6 +1417,70 @@ class UIController {
       });
     });
   }
+  /**
+   * Scan the entire document for citations, match against loaded references,
+   * rebuild citedReferences from scratch, and re-insert the bibliography.
+   */
+  private async scanDocumentAndRebuildBibliography(): Promise<number> {
+    if (!this.loadedReferences.length) return 0;
+
+    let docText = "";
+    try {
+      docText = await this.word.getDocumentTextBeforeBibliography();
+    } catch {
+      return 0;
+    }
+    if (!docText) return 0;
+
+    // Clear and rebuild from scratch based on actual document content
+    this.citedReferences.clear();
+    this.ieeeNumbers.clear();
+
+    const matchedIds = this.matchCitedReferences(docText);
+    for (const refId of matchedIds) {
+      const ref = this.loadedReferences.find((r) => String(r.id) === refId);
+      if (ref) {
+        this.citedReferences.set(String(ref.id), ref);
+        if (!this.ieeeNumbers.has(refId)) {
+          this.ieeeNumbers.set(refId, this.ieeeNumbers.size + 1);
+        }
+      }
+    }
+
+    if (this.citedReferences.size === 0) return 0;
+
+    let bibEntries: string[] = [];
+    if (this.currentProject) {
+      try {
+        const allCitedIds = Array.from(this.citedReferences.keys());
+        const bibRaw = await this.api.getBibliography(this.currentProject.id, allCitedIds, this.currentStyle);
+        const bibArr = extractArray(bibRaw);
+        if (bibArr.length > 0) {
+          bibEntries = bibArr.map((entry: any) => {
+            if (typeof entry === "string") return entry;
+            if (entry.bibliography) return String(entry.bibliography);
+            if (entry.formatted) return String(entry.formatted);
+            if (entry.text) return String(entry.text);
+            return String(entry);
+          });
+        }
+      } catch {
+        // Backend unavailable
+      }
+    }
+
+    if (bibEntries.length === 0) {
+      bibEntries = Array.from(this.citedReferences.entries())
+        .map(([id, ref]) => getBibEntry(ref, this.currentStyle, this.ieeeNumbers.get(id)));
+    }
+
+    // Deduplicate
+    bibEntries = [...new Set(bibEntries)];
+
+    await this.word.insertOrUpdateBibliography(bibEntries);
+    return bibEntries.length;
+  }
+
   /**
    * Scan AI response text for citation patterns and match against loaded project references.
    * Returns an array of reference IDs that appear to be cited in the text.
