@@ -717,7 +717,13 @@ class WordService {
   async getDocumentTextBeforeBibliography(): Promise<string> {
     return Word.run(async (context) => {
       const paragraphs = context.document.body.paragraphs;
-      paragraphs.load("items,text");
+      paragraphs.load("items");
+      await context.sync();
+
+      // Load text for each paragraph individually (more reliable)
+      for (const p of paragraphs.items) {
+        p.load("text");
+      }
       await context.sync();
 
       const parts: string[] = [];
@@ -727,6 +733,7 @@ class WordService {
         if (lower === "bibliography" || lower === "references") break;
         if (t) parts.push(t);
       }
+      console.log("[Lably] Document text paragraphs:", parts.length, "total chars:", parts.join(" ").length);
       return parts.join("\n");
     });
   }
@@ -1034,10 +1041,15 @@ class UIController {
       const btn = document.getElementById("refreshBibBtn") as HTMLButtonElement;
       if (btn) { btn.disabled = true; btn.textContent = "Scanning..."; }
       try {
+        if (!this.loadedReferences.length) {
+          this.showStatus("References not loaded yet. Please wait for references to load.");
+          return;
+        }
         const count = await this.scanDocumentAndRebuildBibliography();
-        this.showStatus(count > 0 ? `Bibliography refreshed with ${count} entries.` : "No citations found in document.");
+        this.showStatus(count > 0 ? `Bibliography refreshed with ${count} entries.` : "No citations found. Make sure the document has [1], [2] or (Author, Year) citations.");
       } catch (err) {
-        this.showStatus("Failed to refresh bibliography.");
+        console.error("[Lably] Refresh bibliography error:", err);
+        this.showStatus("Failed to refresh bibliography: " + (err instanceof Error ? err.message : "Unknown error"));
       } finally {
         if (btn) { btn.disabled = false; btn.textContent = "Refresh Bibliography"; }
       }
@@ -1508,21 +1520,31 @@ class UIController {
    * rebuild citedReferences from scratch, and re-insert the bibliography.
    */
   private async scanDocumentAndRebuildBibliography(): Promise<number> {
-    if (!this.loadedReferences.length) return 0;
+    console.log("[Lably] scanDocumentAndRebuildBibliography called, loadedReferences:", this.loadedReferences.length);
+    if (!this.loadedReferences.length) {
+      console.warn("[Lably] No loaded references available");
+      return 0;
+    }
 
     let docText = "";
     try {
       docText = await this.word.getDocumentTextBeforeBibliography();
-    } catch {
+    } catch (err) {
+      console.error("[Lably] Failed to read document text:", err);
       return 0;
     }
-    if (!docText) return 0;
+    if (!docText) {
+      console.warn("[Lably] Document text is empty");
+      return 0;
+    }
+    console.log("[Lably] Document text length:", docText.length, "first 200 chars:", docText.substring(0, 200));
 
     // Clear and rebuild from scratch based on actual document content
     this.citedReferences.clear();
     this.ieeeNumbers.clear();
 
     const matchedIds = this.matchCitedReferences(docText);
+    console.log("[Lably] Matched reference IDs:", matchedIds.length, matchedIds);
     for (const refId of matchedIds) {
       const ref = this.loadedReferences.find((r) => String(r.id) === refId);
       if (ref) {
@@ -1604,6 +1626,7 @@ class UIController {
       }
     }
 
+    console.log("[Lably] Bracket citations found, numbers:", Array.from(citedNumbers));
     for (const num of citedNumbers) {
       const ref = this.loadedReferences[num - 1];
       if (ref) matchedIds.add(String(ref.id));
