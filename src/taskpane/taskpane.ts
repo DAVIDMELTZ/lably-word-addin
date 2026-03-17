@@ -1451,7 +1451,18 @@ class UIController {
         try {
           await this.word.insertTextAtCursor(plainText);
 
-          // Scan full document for citations and rebuild bibliography
+          // Match references from the AI response (which has the reference list)
+          // then scan the document and rebuild bibliography
+          const aiRefIds = this.matchCitedReferences(msg.content);
+          for (const refId of aiRefIds) {
+            const ref = this.loadedReferences.find((r) => String(r.id) === refId);
+            if (ref) {
+              this.citedReferences.set(String(ref.id), ref);
+              if (!this.ieeeNumbers.has(refId)) {
+                this.ieeeNumbers.set(refId, this.ieeeNumbers.size + 1);
+              }
+            }
+          }
           const bibCount = await this.scanDocumentAndRebuildBibliography();
 
           const bibNote = bibCount > 0 ? ` (${bibCount} ref(s) in bibliography)` : "";
@@ -1593,8 +1604,9 @@ class UIController {
 
   /**
    * Scan text for citation patterns and match against loaded project references.
-   * Strategy 1: Numbered bracket citations [1], [2, 3], [1-5]
-   * Strategy 2: Author name in explicit citation context (with year or in parentheses)
+   * Handles numbered [1], [2, 3] citations by parsing a reference list from the
+   * text (e.g. the AI's "References" section) to map numbers to actual references.
+   * Also matches author-year citation patterns like (Smith, 2023).
    */
   private matchCitedReferences(text: string): string[] {
     if (!this.loadedReferences.length) return [];
@@ -1602,7 +1614,32 @@ class UIController {
     const matchedIds: Set<string> = new Set();
     const lowerText = text.toLowerCase();
 
-    // ---- Strategy 1: Numbered bracket citations [1], [2, 3], [1-5], [1, 4] ----
+    // ---- Strategy 1: Parse numbered reference list from text ----
+    // Look for lines like "[1] O'Hearn A. Can a carnivore..." or "1. Palmer RD. ..."
+    // and match them to loadedReferences by author last name
+    const refListPattern = /\[(\d+)\]\s*(.+)/g;
+    const numberToRefId: Map<number, string> = new Map();
+    let refMatch;
+    while ((refMatch = refListPattern.exec(text)) !== null) {
+      const num = parseInt(refMatch[1], 10);
+      const entryText = refMatch[2].trim().toLowerCase();
+
+      // Try to match this entry to a loaded reference by author last name
+      for (const ref of this.loadedReferences) {
+        const authors = extractAuthors(ref.authors);
+        if (authors.length === 0) continue;
+        const lastName = authors[0].last;
+        if (!lastName || lastName.length < 3) continue;
+
+        // Check if the reference list entry starts with or contains the author name
+        if (entryText.includes(lastName.toLowerCase())) {
+          numberToRefId.set(num, String(ref.id));
+          break;
+        }
+      }
+    }
+
+    // ---- Strategy 2: Extract cited numbers from bracket citations in body text ----
     const bracketPattern = /\[(\d[\d,\s\-]*)\]/g;
     const citedNumbers: Set<number> = new Set();
     let bracketMatch;
@@ -1613,28 +1650,37 @@ class UIController {
         if (trimmed.includes("-")) {
           const [start, end] = trimmed.split("-").map(s => parseInt(s.trim(), 10));
           if (!isNaN(start) && !isNaN(end)) {
-            for (let n = start; n <= end && n <= this.loadedReferences.length; n++) {
+            for (let n = start; n <= Math.min(end, 50); n++) {
               citedNumbers.add(n);
             }
           }
         } else {
           const num = parseInt(trimmed, 10);
-          if (!isNaN(num) && num >= 1 && num <= this.loadedReferences.length) {
+          if (!isNaN(num) && num >= 1) {
             citedNumbers.add(num);
           }
         }
       }
     }
 
-    for (const num of citedNumbers) {
-      const ref = this.loadedReferences[num - 1];
-      if (ref) matchedIds.add(String(ref.id));
+    // Map cited numbers using the parsed reference list
+    if (numberToRefId.size > 0) {
+      // We have a reference list — use it for mapping
+      for (const num of citedNumbers) {
+        const refId = numberToRefId.get(num);
+        if (refId) matchedIds.add(refId);
+      }
+    } else {
+      // No reference list found — fall back to loadedReferences order
+      for (const num of citedNumbers) {
+        if (num <= this.loadedReferences.length) {
+          const ref = this.loadedReferences[num - 1];
+          if (ref) matchedIds.add(String(ref.id));
+        }
+      }
     }
 
-    // ---- Strategy 2: Author name in explicit citation context ----
-    // Only match when the name appears directly in a citation pattern:
-    //   (Author, Year), (Author Year), (Author et al., Year), Author (Year)
-    // NOT when the name just appears in running text.
+    // ---- Strategy 3: Author name in explicit citation context ----
     for (const ref of this.loadedReferences) {
       if (matchedIds.has(String(ref.id))) continue;
 
@@ -1646,7 +1692,7 @@ class UIController {
 
       const lowerName = lastName.toLowerCase();
       const year = ref.year ? String(ref.year) : null;
-      if (!year) continue; // require year for author-based matching to avoid false positives
+      if (!year) continue;
 
       let searchFrom = 0;
       while (searchFrom < lowerText.length) {
@@ -1654,15 +1700,12 @@ class UIController {
         if (nameIdx === -1) break;
         searchFrom = nameIdx + lowerName.length;
 
-        // Check: is this name in a citation context?
-        // Look at the surrounding 60 chars for year + parenthetical pattern
         const windowStart = Math.max(0, nameIdx - 15);
         const windowEnd = Math.min(lowerText.length, nameIdx + lowerName.length + 45);
         const window = lowerText.substring(windowStart, windowEnd);
 
         if (!window.includes(year)) continue;
 
-        // Must also have parentheses nearby to confirm citation context
         const textWindow = text.substring(windowStart, windowEnd);
         if (textWindow.includes("(") || textWindow.includes(")")) {
           matchedIds.add(String(ref.id));
