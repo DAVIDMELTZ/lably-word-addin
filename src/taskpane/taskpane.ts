@@ -712,7 +712,8 @@ class WordService {
   }
 
   /**
-   * Read all document text (excluding the Bibliography/References section).
+   * Read all document text (excluding the Bibliography section we generate).
+   * Keeps the AI's "References" section intact for citation number mapping.
    */
   async getDocumentTextBeforeBibliography(): Promise<string> {
     return Word.run(async (context) => {
@@ -722,12 +723,13 @@ class WordService {
 
       let fullText = body.text || "";
 
-      // Strip everything from Bibliography/References heading onwards
+      // Strip everything from our Bibliography heading onwards
+      // NOTE: Only strip "Bibliography" (our heading), NOT "References"
+      // because the AI's "References" section is content we need to keep
+      // for mapping numbered citations [1], [2] to actual references
       const bibPatterns = [
         /\nBibliography\n/i,
-        /\nReferences\n/i,
         /\nBibliography$/im,
-        /\nReferences$/im,
       ];
       for (const pattern of bibPatterns) {
         const match = fullText.match(pattern);
