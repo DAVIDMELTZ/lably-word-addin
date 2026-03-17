@@ -716,25 +716,28 @@ class WordService {
    */
   async getDocumentTextBeforeBibliography(): Promise<string> {
     return Word.run(async (context) => {
-      const paragraphs = context.document.body.paragraphs;
-      paragraphs.load("items");
+      const body = context.document.body;
+      body.load("text");
       await context.sync();
 
-      // Load text for each paragraph individually (more reliable)
-      for (const p of paragraphs.items) {
-        p.load("text");
-      }
-      await context.sync();
+      let fullText = body.text || "";
 
-      const parts: string[] = [];
-      for (const p of paragraphs.items) {
-        const t = (p.text || "").trim();
-        const lower = t.toLowerCase();
-        if (lower === "bibliography" || lower === "references") break;
-        if (t) parts.push(t);
+      // Strip everything from Bibliography/References heading onwards
+      const bibPatterns = [
+        /\nBibliography\n/i,
+        /\nReferences\n/i,
+        /\nBibliography$/im,
+        /\nReferences$/im,
+      ];
+      for (const pattern of bibPatterns) {
+        const match = fullText.match(pattern);
+        if (match && match.index !== undefined) {
+          fullText = fullText.substring(0, match.index);
+          break;
+        }
       }
-      console.log("[Lably] Document text paragraphs:", parts.length, "total chars:", parts.join(" ").length);
-      return parts.join("\n");
+
+      return fullText.trim();
     });
   }
 
@@ -1520,9 +1523,8 @@ class UIController {
    * rebuild citedReferences from scratch, and re-insert the bibliography.
    */
   private async scanDocumentAndRebuildBibliography(): Promise<number> {
-    console.log("[Lably] scanDocumentAndRebuildBibliography called, loadedReferences:", this.loadedReferences.length);
     if (!this.loadedReferences.length) {
-      console.warn("[Lably] No loaded references available");
+      this.showStatus("No references loaded.");
       return 0;
     }
 
@@ -1530,21 +1532,19 @@ class UIController {
     try {
       docText = await this.word.getDocumentTextBeforeBibliography();
     } catch (err) {
-      console.error("[Lably] Failed to read document text:", err);
+      this.showStatus("Error reading document: " + (err instanceof Error ? err.message : String(err)));
       return 0;
     }
     if (!docText) {
-      console.warn("[Lably] Document text is empty");
+      this.showStatus("Could not read document text (empty).");
       return 0;
     }
-    console.log("[Lably] Document text length:", docText.length, "first 200 chars:", docText.substring(0, 200));
 
     // Clear and rebuild from scratch based on actual document content
     this.citedReferences.clear();
     this.ieeeNumbers.clear();
 
     const matchedIds = this.matchCitedReferences(docText);
-    console.log("[Lably] Matched reference IDs:", matchedIds.length, matchedIds);
     for (const refId of matchedIds) {
       const ref = this.loadedReferences.find((r) => String(r.id) === refId);
       if (ref) {
@@ -1626,7 +1626,6 @@ class UIController {
       }
     }
 
-    console.log("[Lably] Bracket citations found, numbers:", Array.from(citedNumbers));
     for (const num of citedNumbers) {
       const ref = this.loadedReferences[num - 1];
       if (ref) matchedIds.add(String(ref.id));
