@@ -1255,7 +1255,7 @@ class UIController {
     btn.id = "chatToggleBtn";
     btn.className = "chat-toggle-btn";
     btn.title = "AI Assistant";
-    btn.innerHTML = `<img src="assets/lably-mascot.svg" alt="AI Assistant" width="32" height="32" style="pointer-events: none;" />`;
+    btn.innerHTML = `<img src="assets/lably-mascot.png" alt="AI Assistant" width="32" height="32" style="pointer-events: none;" />`;
     btn.addEventListener("click", () => this.toggleChat());
     document.getElementById("root")!.appendChild(btn);
 
