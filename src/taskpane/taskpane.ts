@@ -690,6 +690,86 @@ class WordService {
     });
   }
 
+  /**
+   * Read cited reference IDs persisted inside the document via Custom XML Parts.
+   * Returns an empty array if none stored or on any error.
+   * This allows the bibliography to survive document close/reopen.
+   */
+  async getPersistedCitedIds(): Promise<string[]> {
+    return new Promise((resolve) => {
+      try {
+        Office.context.document.customXmlParts.getByNamespaceAsync(
+          "https://lably.cloud/citations/v1",
+          (result) => {
+            if (
+              result.status === Office.AsyncResultStatus.Succeeded &&
+              result.value.length > 0
+            ) {
+              result.value[0].getXmlAsync((xmlResult) => {
+                if (xmlResult.status === Office.AsyncResultStatus.Succeeded) {
+                  try {
+                    const matches = xmlResult.value.match(/<id>([^<]+)<\/id>/g) || [];
+                    const ids = matches
+                      .map((m) => m.replace(/<\/?id>/g, "").trim())
+                      .filter(Boolean);
+                    resolve(ids);
+                  } catch {
+                    resolve([]);
+                  }
+                } else {
+                  resolve([]);
+                }
+              });
+            } else {
+              resolve([]);
+            }
+          }
+        );
+      } catch {
+        resolve([]);
+      }
+    });
+  }
+
+  /**
+   * Persist cited reference IDs into the document via Custom XML Parts so they
+   * survive document close/reopen.
+   */
+  async persistCitedIds(ids: string[]): Promise<void> {
+    return new Promise((resolve) => {
+      try {
+        const escId = (id: string) =>
+          id.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const xml = `<citations xmlns="https://lably.cloud/citations/v1">${ids
+          .map((id) => `<id>${escId(id)}</id>`)
+          .join("")}</citations>`;
+
+        Office.context.document.customXmlParts.getByNamespaceAsync(
+          "https://lably.cloud/citations/v1",
+          (result) => {
+            const addNew = () => {
+              Office.context.document.customXmlParts.addAsync(xml, () => resolve());
+            };
+            if (
+              result.status === Office.AsyncResultStatus.Succeeded &&
+              result.value.length > 0
+            ) {
+              let remaining = result.value.length;
+              for (const part of result.value) {
+                part.deleteAsync(() => {
+                  if (--remaining === 0) addNew();
+                });
+              }
+            } else {
+              addNew();
+            }
+          }
+        );
+      } catch {
+        resolve();
+      }
+    });
+  }
 
 
 }
@@ -1130,15 +1210,30 @@ class UIController {
       }
 
       // ---- Step 3: Update bibliography with cited references ----
+      // Add newly cited refs to in-memory map
       for (const refId of refIds) {
         const ref = this.loadedReferences.find((r) => String(r.id) === refId);
         if (ref) this.citedReferences.set(String(ref.id), ref);
       }
 
+      // Restore any previously cited IDs persisted in the document (handles reopen scenario)
+      const persistedIds = await this.word.getPersistedCitedIds();
+      for (const id of persistedIds) {
+        if (!this.citedReferences.has(id)) {
+          const ref = this.loadedReferences.find((r) => String(r.id) === id);
+          if (ref) this.citedReferences.set(id, ref);
+        }
+      }
+
+      // Full set of all cited IDs: in-memory + any persisted-only ones
+      const allCitedIds = [...new Set([...Array.from(this.citedReferences.keys()), ...persistedIds])];
+
+      // Persist the updated set back into the document so next reopen is correct
+      await this.word.persistCitedIds(allCitedIds);
+
       let bibEntries: string[] = [];
       if (this.currentProject) {
         try {
-          const allCitedIds = Array.from(this.citedReferences.keys());
           const bibRaw = await this.api.getBibliography(this.currentProject.id, allCitedIds, this.currentStyle);
           const bibArr = extractArray(bibRaw);
           if (bibArr.length > 0) {
@@ -1204,11 +1299,25 @@ class UIController {
         }
       }
 
+      // Restore any previously cited IDs persisted in the document (handles reopen scenario)
+      const persistedIds = await this.word.getPersistedCitedIds();
+      for (const id of persistedIds) {
+        if (!this.citedReferences.has(id)) {
+          const ref = this.loadedReferences.find((r) => String(r.id) === id);
+          if (ref) this.citedReferences.set(id, ref);
+        }
+      }
+
+      // Full set of all cited IDs: in-memory + any persisted-only ones
+      const allCitedIds = [...new Set([...Array.from(this.citedReferences.keys()), ...persistedIds])];
+
+      // Persist the updated set back into the document
+      await this.word.persistCitedIds(allCitedIds);
+
       // Try backend bibliography API first
       let bibEntries: string[] = [];
       if (this.currentProject) {
         try {
-          const allCitedIds = Array.from(this.citedReferences.keys());
           const bibRaw = await this.api.getBibliography(this.currentProject.id, allCitedIds, this.currentStyle);
           const bibArr = extractArray(bibRaw);
           if (bibArr.length > 0) {
