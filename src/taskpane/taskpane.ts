@@ -624,6 +624,10 @@ class WordService {
       paragraphs.load("items,text,style");
       await context.sync();
 
+      // Load all paragraph texts so we can read existing bibliography entries
+      for (const p of paragraphs.items) p.load("text");
+      await context.sync();
+
       // Look for existing "Bibliography" or "References" heading
       let bibHeadingIndex = -1;
       for (let i = 0; i < paragraphs.items.length; i++) {
@@ -634,12 +638,32 @@ class WordService {
         }
       }
 
+      // Collect existing bibliography entry texts before deleting them.
+      // This preserves entries from previous sessions where no IDs were persisted
+      // (e.g. documents created before the custom XML persistence was introduced).
+      const existingEntries: string[] = [];
       if (bibHeadingIndex >= 0) {
+        for (let i = bibHeadingIndex + 1; i < paragraphs.items.length; i++) {
+          const t = paragraphs.items[i].text.trim();
+          if (t) existingEntries.push(t);
+        }
         // Delete everything from the bibliography heading to the end
         for (let i = paragraphs.items.length - 1; i >= bibHeadingIndex; i--) {
           paragraphs.items[i].delete();
         }
         await context.sync();
+      }
+
+      // Merge: new entries take priority (freshly formatted by the API).
+      // Any existing entry not already present in the new list is appended so
+      // nothing is lost when the document is reopened and only one new citation
+      // is added but the persisted ID list is not yet populated.
+      const mergedEntries = [...entries];
+      for (const existing of existingEntries) {
+        const alreadyCovered = mergedEntries.some(
+          (e) => e.trim().toLowerCase() === existing.trim().toLowerCase()
+        );
+        if (!alreadyCovered) mergedEntries.push(existing);
       }
 
       // Insert bibliography heading (bold, normal size — not Heading1)
@@ -650,7 +674,7 @@ class WordService {
       heading.spaceAfter = 6;
 
       // Insert each bibliography entry as its own paragraph
-      for (const entry of entries) {
+      for (const entry of mergedEntries) {
         const para = body.insertParagraph(entry, Word.InsertLocation.end);
         para.styleBuiltIn = Word.BuiltInStyleName.normal;
         para.font.bold = false;
