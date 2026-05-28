@@ -1052,7 +1052,7 @@ class UIController {
           <button id="refreshBtn" class="btn btn-secondary btn-small" title="Refresh references">↻ Refresh</button>
         </div>
         <div class="controls">
-          <input type="text" id="searchInput" class="search-input" placeholder="Search references..." />
+          <input type="text" id="searchInput" class="search-input" placeholder="Search by title or author..." />
           <div class="style-selector">
             <label for="styleSelect">Citation Style:</label>
             <select id="styleSelect" class="style-select">
