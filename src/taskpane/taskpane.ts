@@ -814,6 +814,8 @@ class UIController {
   private citedReferences: Map<string, Reference> = new Map();
   // Map reference ID → IEEE citation number (1-based, in order of first citation)
   private ieeeNumbers: Map<string, number> = new Map();
+  // Full unfiltered reference list for the current project (used for client-side search)
+  private allReferences: Reference[] = [];
   // Cache loaded references so Insert Citation can access them
   private loadedReferences: Reference[] = [];
   // Dynamic citation styles — loaded from backend, fallback to FALLBACK_STYLES
@@ -944,9 +946,10 @@ class UIController {
   // ========================================================================
 
   private async showProjectView(): Promise<void> {
-    // Reset cited references when going back to projects
+    // Reset cited references and reference cache when going back to projects
     this.citedReferences.clear();
     this.ieeeNumbers.clear();
+    this.allReferences = [];
 
     const root = document.getElementById("root")!;
     root.innerHTML = `
@@ -1071,21 +1074,21 @@ class UIController {
     `;
 
     document.getElementById("backBtn")!.addEventListener("click", () => this.showProjectView());
-    document.getElementById("refreshBtn")!.addEventListener("click", () => this.loadReferences());
+    document.getElementById("refreshBtn")!.addEventListener("click", () => this.loadReferences(true));
     document.getElementById("styleSelect")!.addEventListener("change", (e) => {
       const select = e.target as HTMLSelectElement;
       this.currentStyle = select.value;
-      this.loadReferences();
+      this.loadReferences(true); // re-fetch so style-formatted fields are updated
     });
     document.getElementById("searchInput")!.addEventListener("input", () => {
       if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
-      this.searchDebounceTimer = setTimeout(() => this.loadReferences(), 300);
+      this.searchDebounceTimer = setTimeout(() => this.loadReferences(), 300); // filter only, no fetch
     });
     document.getElementById("insertInlineBtn")!.addEventListener("click", () => this.insertSelectedCitations());
     document.getElementById("insertBibBtn")!.addEventListener("click", () => this.insertBibliographyOnly());
 
     this.renderChatToggle();
-    this.loadReferences();
+    this.loadReferences(true); // initial load — always fetch fresh
   }
 
   private showStatus(msg: string): void {
@@ -1097,7 +1100,7 @@ class UIController {
     }
   }
 
-  private async loadReferences(): Promise<void> {
+  private async loadReferences(fetchFresh = false): Promise<void> {
     if (!this.currentProject) return;
     const referencesList = document.getElementById("referencesList");
     const loadingDiv = document.getElementById("loadingReferences");
@@ -1111,11 +1114,24 @@ class UIController {
     loadingDiv.className = "loading";
 
     try {
-      const searchTerm = (document.getElementById("searchInput") as HTMLInputElement)?.value || "";
-      const rawResponse = await this.api.getReferences(this.currentProject.id, searchTerm, this.currentStyle);
-      const references: Reference[] = extractArray(rawResponse);
-      this.loadedReferences = references;
+      // Fetch all references from the API only when required (initial load, refresh, style change).
+      // Search is handled client-side so both title and author are searchable without extra API calls.
+      if (fetchFresh || this.allReferences.length === 0) {
+        const rawResponse = await this.api.getReferences(this.currentProject.id, undefined, this.currentStyle);
+        this.allReferences = extractArray(rawResponse);
+      }
 
+      // Client-side filter by title OR author name
+      const searchTerm = ((document.getElementById("searchInput") as HTMLInputElement)?.value || "").toLowerCase().trim();
+      const references: Reference[] = searchTerm
+        ? this.allReferences.filter((ref) => {
+            const titleMatch = (ref.title || "").toLowerCase().includes(searchTerm);
+            const authorMatch = authorsToString(ref.authors).toLowerCase().includes(searchTerm);
+            return titleMatch || authorMatch;
+          })
+        : this.allReferences;
+
+      this.loadedReferences = references;
       loadingDiv.style.display = "none";
 
       if (references.length === 0) {
