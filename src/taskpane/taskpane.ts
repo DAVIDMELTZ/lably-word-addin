@@ -1049,6 +1049,7 @@ class UIController {
         <div class="header">
           <button id="backBtn" class="btn btn-secondary btn-small">Back</button>
           <h2>${escapeHtml(String(project.name || ""))}</h2>
+          <button id="refreshBtn" class="btn btn-secondary btn-small" title="Refresh references">↻ Refresh</button>
         </div>
         <div class="controls">
           <input type="text" id="searchInput" class="search-input" placeholder="Search references..." />
@@ -1070,6 +1071,7 @@ class UIController {
     `;
 
     document.getElementById("backBtn")!.addEventListener("click", () => this.showProjectView());
+    document.getElementById("refreshBtn")!.addEventListener("click", () => this.loadReferences());
     document.getElementById("styleSelect")!.addEventListener("change", (e) => {
       const select = e.target as HTMLSelectElement;
       this.currentStyle = select.value;
@@ -1100,6 +1102,9 @@ class UIController {
     const referencesList = document.getElementById("referencesList");
     const loadingDiv = document.getElementById("loadingReferences");
     if (!referencesList || !loadingDiv) return;
+
+    const refreshBtn = document.getElementById("refreshBtn") as HTMLButtonElement | null;
+    if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.textContent = "Refreshing..."; }
 
     loadingDiv.style.display = "block";
     loadingDiv.textContent = "Loading references...";
@@ -1147,6 +1152,8 @@ class UIController {
     } catch (error) {
       loadingDiv.innerHTML = `<div class="error-message"><strong>Error:</strong> ${escapeHtml(error instanceof Error ? error.message : String(error))}</div>`;
       loadingDiv.style.display = "block";
+    } finally {
+      if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.textContent = "↻ Refresh"; }
     }
   }
 
