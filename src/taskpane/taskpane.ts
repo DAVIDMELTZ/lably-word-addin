@@ -874,7 +874,7 @@ class UIController {
         </div>
         <p class="welcome-styles">Supports APA, MLA, Chicago, Harvard, IEEE and more.</p>
         <div class="welcome-auth-notice">
-          <p>Sign in with your Lably account to get started. A premium account is required to use the Word add-in. Visit <a href="https://lably.cloud" target="_blank">lably.cloud</a> to learn more.</p>
+          <p>Sign in with your Lably account to get started. A Pro or Premium account is required to use the Word add-in. Visit <a href="https://lably.cloud" target="_blank">lably.cloud</a> to learn more.</p>
         </div>
         <button id="getStartedBtn" class="btn btn-primary btn-large">Get Started</button>
         <div class="welcome-links">
@@ -913,7 +913,7 @@ class UIController {
         </form>
         <div id="loginError" class="error-message" style="display: none;"></div>
         <div class="login-links">
-          <p>Need a premium account? <a href="https://lably.cloud/signup" target="_blank">Sign up</a></p>
+          <p>Need a Pro or Premium account? <a href="https://lably.cloud/signup" target="_blank">Sign up</a></p>
           <p><a href="https://lably.cloud/support" target="_blank">Need help?</a></p>
         </div>
       </div>
