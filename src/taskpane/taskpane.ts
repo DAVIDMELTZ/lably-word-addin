@@ -1049,10 +1049,16 @@ class UIController {
     const root = document.getElementById("root")!;
     root.innerHTML = `
       <div class="references-container">
-        <div class="header">
-          <button id="backBtn" class="btn btn-secondary btn-small">Back</button>
+        <div class="references-toolbar">
+          <button id="backBtn" class="btn btn-secondary icon-button" type="button" title="Back to projects" aria-label="Back to projects">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+          </button>
+          <button id="refreshBtn" class="btn btn-secondary icon-button" type="button" title="Refresh references" aria-label="Refresh references">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2" /></svg>
+          </button>
+        </div>
+        <div class="project-title">
           <h2>${escapeHtml(String(project.name || ""))}</h2>
-          <button id="refreshBtn" class="btn btn-secondary btn-small" title="Refresh references">↻ Refresh</button>
         </div>
         <div class="controls">
           <input type="text" id="searchInput" class="search-input" placeholder="Search by title or author..." />
@@ -1107,7 +1113,10 @@ class UIController {
     if (!referencesList || !loadingDiv) return;
 
     const refreshBtn = document.getElementById("refreshBtn") as HTMLButtonElement | null;
-    if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.textContent = "Refreshing..."; }
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
+      refreshBtn.setAttribute("aria-label", "Refreshing references");
+    }
 
     loadingDiv.style.display = "block";
     loadingDiv.textContent = "Loading references...";
@@ -1169,7 +1178,10 @@ class UIController {
       loadingDiv.innerHTML = `<div class="error-message"><strong>Error:</strong> ${escapeHtml(error instanceof Error ? error.message : String(error))}</div>`;
       loadingDiv.style.display = "block";
     } finally {
-      if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.textContent = "↻ Refresh"; }
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.setAttribute("aria-label", "Refresh references");
+      }
     }
   }
 
