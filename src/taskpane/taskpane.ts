@@ -1259,12 +1259,25 @@ class UIController {
         ].filter(Boolean).join(" · ");
         return `
           <article class="annotation-card" style="--annotation-color: ${color}">
-            ${annotation.highlighted_text ? `<blockquote>${escapeHtml(String(annotation.highlighted_text))}</blockquote>` : ""}
-            ${annotation.note ? `<p class="annotation-note">${escapeHtml(String(annotation.note))}</p>` : ""}
+            <button type="button" class="annotation-expand" aria-expanded="false">
+              ${annotation.highlighted_text ? `<blockquote>${escapeHtml(String(annotation.highlighted_text))}</blockquote>` : ""}
+              ${annotation.note ? `<p class="annotation-note">${escapeHtml(String(annotation.note))}</p>` : ""}
+              <span class="annotation-expand-label">Show full annotation</span>
+            </button>
             ${details ? `<p class="annotation-meta">${details}</p>` : ""}
           </article>
         `;
       }).join("");
+
+      content.querySelectorAll<HTMLButtonElement>(".annotation-expand").forEach((button) => {
+        button.addEventListener("click", () => {
+          const expanded = button.getAttribute("aria-expanded") === "true";
+          button.setAttribute("aria-expanded", String(!expanded));
+          button.closest(".annotation-card")?.classList.toggle("annotation-card-expanded", !expanded);
+          const label = button.querySelector<HTMLElement>(".annotation-expand-label");
+          if (label) label.textContent = expanded ? "Show full annotation" : "Show less";
+        });
+      });
     } catch (error) {
       const content = overlay.querySelector<HTMLElement>(".annotations-content");
       if (content) {

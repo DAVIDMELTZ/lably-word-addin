@@ -609,6 +609,22 @@ textarea {
   background: white;
 }
 
+.annotation-expand {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.annotation-expand:focus-visible {
+  outline: 2px solid #526d91;
+  outline-offset: 3px;
+}
+
 .annotation-card blockquote {
   margin-bottom: 8px;
   padding: 8px 10px;
@@ -618,12 +634,34 @@ textarea {
   font-family: "Lora", Georgia, serif;
   font-size: 13px;
   line-height: 1.5;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
 
 .annotation-note {
   font-size: 13px;
   line-height: 1.5;
   white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.annotation-card-expanded blockquote,
+.annotation-card-expanded .annotation-note {
+  display: block;
+  overflow: visible;
+}
+
+.annotation-expand-label {
+  display: inline-block;
+  margin-top: 6px;
+  color: #526d91;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .annotation-meta {
