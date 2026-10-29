@@ -1,7 +1,7 @@
 {
   "name": "lably-word-addin",
   "version": "1.0.0",
-  "description": "Lably Word Add-in - Insert citations and bibliographies directly into Word",
+  "description": "Lably Word Add-in - Insert citations and references directly into Word",
   "main": "src/taskpane/taskpane.ts",
   "scripts": {
     "build": "webpack --mode production",
@@ -15,7 +15,7 @@
     "office-addins",
     "word",
     "citations",
-    "bibliography",
+    "references",
     "lably"
   ],
   "author": "Lably",

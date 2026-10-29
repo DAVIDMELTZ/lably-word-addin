@@ -193,7 +193,7 @@ function buildInlineCitation(ref: Reference, style: string, ieeeNumber?: number)
 }
 
 /**
- * Build a bibliography entry formatted per the selected style.
+ * Build a reference entry formatted per the selected style.
  * Uses pre-formatted fields from the API if available, otherwise builds locally.
  *
  * APA:     Last, F. M., Last, F. M., & Last, F. M. (Year). Title. Source.
@@ -423,7 +423,7 @@ class CitationAPI {
     );
   }
 
-  async getBibliography(projectId: string, referenceIds: string[], style: string): Promise<any> {
+  async getFormattedReferences(projectId: string, referenceIds: string[], style: string): Promise<any> {
     const ids = referenceIds.join(",");
     return this.request(
       `/office-citations?action=bibliography&projectId=${encodeURIComponent(projectId)}&referenceIds=${encodeURIComponent(ids)}&style=${encodeURIComponent(style)}`
@@ -592,11 +592,11 @@ class WordService {
         for (const p of paragraphs.items) p.load("text");
         await context.sync();
 
-        // Find last non-bibliography paragraph
+        // Find last non-references paragraph
         let target = paragraphs.items[0];
         for (let i = paragraphs.items.length - 1; i >= 0; i--) {
           const t = (paragraphs.items[i].text || "").trim().toLowerCase();
-          if (t && t !== "bibliography" && t !== "references") {
+          if (t && t !== "references") {
             target = paragraphs.items[i];
             break;
           }
@@ -614,31 +614,31 @@ class WordService {
   }
 
   /**
-   * Find an existing "Bibliography" or "References" section and replace it,
+  * Find an existing "References" section and replace it,
    * or create one at the end of the document. Uses Normal style to match doc font.
    */
-  async insertOrUpdateBibliography(entries: string[]): Promise<void> {
+  async insertOrUpdateReferences(entries: string[]): Promise<void> {
     return Word.run(async (context) => {
       const body = context.document.body;
       const paragraphs = body.paragraphs;
       paragraphs.load("items,text,style");
       await context.sync();
 
-      // Load all paragraph texts so we can read existing bibliography entries
+      // Load all paragraph texts so we can read existing reference entries
       for (const p of paragraphs.items) p.load("text");
       await context.sync();
 
-      // Look for existing "Bibliography" or "References" heading
+      // Look for an existing "References" heading
       let bibHeadingIndex = -1;
       for (let i = 0; i < paragraphs.items.length; i++) {
         const text = paragraphs.items[i].text.trim().toLowerCase();
-        if (text === "bibliography" || text === "references") {
+        if (text === "references") {
           bibHeadingIndex = i;
           break;
         }
       }
 
-      // Collect existing bibliography entry texts before deleting them.
+      // Collect existing reference entry texts before deleting them.
       // This preserves entries from previous sessions where no IDs were persisted
       // (e.g. documents created before the custom XML persistence was introduced).
       const existingEntries: string[] = [];
@@ -647,7 +647,7 @@ class WordService {
           const t = paragraphs.items[i].text.trim();
           if (t) existingEntries.push(t);
         }
-        // Delete everything from the bibliography heading to the end
+        // Delete everything from the references heading to the end
         for (let i = paragraphs.items.length - 1; i >= bibHeadingIndex; i--) {
           paragraphs.items[i].delete();
         }
@@ -666,14 +666,14 @@ class WordService {
         if (!alreadyCovered) mergedEntries.push(existing);
       }
 
-      // Insert bibliography heading (bold, normal size — not Heading1)
-      const heading = body.insertParagraph("Bibliography", Word.InsertLocation.end);
+      // Insert references heading (bold, normal size — not Heading1)
+      const heading = body.insertParagraph("References", Word.InsertLocation.end);
       heading.styleBuiltIn = Word.BuiltInStyleName.normal;
       heading.font.bold = true;
       heading.font.size = 12;
       heading.spaceAfter = 6;
 
-      // Insert each bibliography entry as its own paragraph
+      // Insert each reference entry as its own paragraph
       for (const entry of mergedEntries) {
         const para = body.insertParagraph(entry, Word.InsertLocation.end);
         para.styleBuiltIn = Word.BuiltInStyleName.normal;
@@ -717,7 +717,7 @@ class WordService {
   /**
    * Read cited reference IDs persisted inside the document via Custom XML Parts.
    * Returns an empty array if none stored or on any error.
-   * This allows the bibliography to survive document close/reopen.
+  * This allows the references to survive document close/reopen.
    */
   async getPersistedCitedIds(): Promise<string[]> {
     return new Promise((resolve) => {
@@ -869,7 +869,7 @@ class UIController {
           </div>
           <div class="welcome-feature">
             <span class="feature-icon">3</span>
-            <p>Auto-generate and update your bibliography as you write</p>
+            <p>Auto-generate and update your references as you write</p>
           </div>
         </div>
         <p class="welcome-styles">Supports APA, MLA, Chicago, Harvard, IEEE and more.</p>
@@ -1068,7 +1068,7 @@ class UIController {
         <div id="statusBar" style="display:none;padding:8px 12px;font-size:12px;background:#e8f5e9;color:#2e7d32;border-top:1px solid #c8e6c9;"></div>
         <div class="action-bar">
           <button id="insertInlineBtn" class="btn btn-primary" disabled>Insert Citation</button>
-          <button id="insertBibBtn" class="btn btn-secondary" disabled>Insert Bibliography</button>
+          <button id="insertBibBtn" class="btn btn-secondary" disabled>Insert References</button>
         </div>
       </div>
     `;
@@ -1085,7 +1085,7 @@ class UIController {
       this.searchDebounceTimer = setTimeout(() => this.loadReferences(), 300); // filter only, no fetch
     });
     document.getElementById("insertInlineBtn")!.addEventListener("click", () => this.insertSelectedCitations());
-    document.getElementById("insertBibBtn")!.addEventListener("click", () => this.insertBibliographyOnly());
+    document.getElementById("insertBibBtn")!.addEventListener("click", () => this.insertReferencesOnly());
 
     this.renderChatToggle();
     this.loadReferences(true); // initial load — always fetch fresh
@@ -1182,7 +1182,7 @@ class UIController {
   }
 
   /**
-   * Insert Citation button: inserts inline citation at cursor AND auto-updates bibliography.
+  * Insert Citation button: inserts inline citation at cursor AND auto-updates references.
    */
   private async insertSelectedCitations(): Promise<void> {
     if (this.selectedReferences.size === 0) return;
@@ -1256,7 +1256,7 @@ class UIController {
         }
       }
 
-      // ---- Step 3: Update bibliography with cited references ----
+      // ---- Step 3: Update references with cited sources ----
       // Add newly cited refs to in-memory map
       for (const refId of refIds) {
         const ref = this.loadedReferences.find((r) => String(r.id) === refId);
@@ -1281,7 +1281,7 @@ class UIController {
       let bibEntries: string[] = [];
       if (this.currentProject) {
         try {
-          const bibRaw = await this.api.getBibliography(this.currentProject.id, allCitedIds, this.currentStyle);
+          const bibRaw = await this.api.getFormattedReferences(this.currentProject.id, allCitedIds, this.currentStyle);
           const bibArr = extractArray(bibRaw);
           if (bibArr.length > 0) {
             bibEntries = bibArr.map((entry: any) => {
@@ -1303,11 +1303,11 @@ class UIController {
       bibEntries = [...new Set(bibEntries)].map(e =>
         e.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
       );
-      await this.word.insertOrUpdateBibliography(bibEntries);
+      await this.word.insertOrUpdateReferences(bibEntries);
       const bibCount = bibEntries.length;
 
       if (insertSuccess) {
-        this.showStatus(`Inserted ${refIds.length} citation(s) and updated bibliography (${bibCount} entries).`);
+        this.showStatus(`Inserted ${refIds.length} citation(s) and updated references (${bibCount} entries).`);
       }
 
       this.selectedReferences.clear();
@@ -1322,9 +1322,9 @@ class UIController {
   }
 
   /**
-   * Insert Bibliography button: manually insert/update bibliography for selected references.
+  * Insert References button: manually insert/update references for selected sources.
    */
-  private async insertBibliographyOnly(): Promise<void> {
+  private async insertReferencesOnly(): Promise<void> {
     if (!this.currentProject || this.selectedReferences.size === 0) return;
 
     const btn = document.getElementById("insertBibBtn") as HTMLButtonElement;
@@ -1361,11 +1361,11 @@ class UIController {
       // Persist the updated set back into the document
       await this.word.persistCitedIds(allCitedIds);
 
-      // Try backend bibliography API first
+      // Try the backend references API first
       let bibEntries: string[] = [];
       if (this.currentProject) {
         try {
-          const bibRaw = await this.api.getBibliography(this.currentProject.id, allCitedIds, this.currentStyle);
+          const bibRaw = await this.api.getFormattedReferences(this.currentProject.id, allCitedIds, this.currentStyle);
           const bibArr = extractArray(bibRaw);
           if (bibArr.length > 0) {
             bibEntries = bibArr.map((entry: any) => {
@@ -1377,7 +1377,7 @@ class UIController {
             });
           }
         } catch {
-          // Backend bibliography API unavailable — fall through to local
+          // Backend references API unavailable — fall through to local
         }
       }
 
@@ -1387,13 +1387,13 @@ class UIController {
           .map(([id, ref]) => getBibEntry(ref, this.currentStyle, this.ieeeNumbers.get(id)));
       }
 
-      await this.word.insertOrUpdateBibliography(bibEntries);
-      this.showStatus(`Bibliography updated with ${bibEntries.length} entries.`);
+      await this.word.insertOrUpdateReferences(bibEntries);
+      this.showStatus(`References updated with ${bibEntries.length} entries.`);
 
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to insert bibliography");
+      alert(error instanceof Error ? error.message : "Failed to insert references");
     } finally {
-      if (btn) { btn.disabled = this.selectedReferences.size === 0; btn.textContent = "Insert Bibliography"; }
+      if (btn) { btn.disabled = this.selectedReferences.size === 0; btn.textContent = "Insert References"; }
     }
   }
 
