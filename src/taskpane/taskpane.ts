@@ -27,8 +27,18 @@ interface Reference {
   title: string;
   authors?: any; // Can be string, array of strings, or array of objects
   year?: number;
+  annotation_count?: number;
   source?: string;
   [key: string]: any;
+}
+
+interface PaperAnnotation {
+  id: string;
+  highlighted_text?: string | null;
+  note?: string | null;
+  color?: string | null;
+  page?: number | null;
+  created_at?: string | null;
 }
 
 interface FormattedCitation {
@@ -414,6 +424,10 @@ class CitationAPI {
     if (search) url += `&search=${encodeURIComponent(search)}`;
     if (style) url += `&style=${encodeURIComponent(style)}`;
     return this.request(url);
+  }
+
+  async getAnnotations(referenceId: string): Promise<any> {
+    return this.request(`/office-citations?action=annotations&referenceId=${encodeURIComponent(referenceId)}`);
   }
 
   async formatCitations(referenceIds: string[], style: string): Promise<any> {
@@ -1156,13 +1170,23 @@ class UIController {
             <input type="checkbox" class="ref-checkbox" data-ref-id="${escapeHtml(String(ref.id || ""))}"
               ${this.selectedReferences.has(String(ref.id)) ? "checked" : ""} />
             <div class="ref-content">
-              <h4>${escapeHtml(String(ref.title || "Untitled"))}</h4>
+              <button type="button" class="ref-title-button" data-annotation-ref-id="${escapeHtml(String(ref.id || ""))}">
+                ${escapeHtml(String(ref.title || "Untitled"))}
+              </button>
+              <p class="annotation-count">${Number(ref.annotation_count) || 0} ${(Number(ref.annotation_count) || 0) === 1 ? "annotation" : "annotations"}</p>
               <p class="ref-authors">${escapeHtml(authorsToString(ref.authors))}</p>
               <p class="ref-year">${ref.year || ""}</p>
               <p class="ref-formatted">${escapeHtml(String(ref[styleKey] || ""))}</p>
             </div>
           </div>
         `).join("");
+
+      referencesList.querySelectorAll<HTMLButtonElement>(".ref-title-button").forEach((button) => {
+        button.addEventListener("click", () => {
+          const reference = this.allReferences.find((item) => String(item.id) === button.dataset.annotationRefId);
+          if (reference) this.showAnnotations(reference);
+        });
+      });
 
       document.querySelectorAll<HTMLInputElement>(".ref-checkbox").forEach((checkbox) => {
         checkbox.addEventListener("change", () => {
@@ -1181,6 +1205,70 @@ class UIController {
       if (refreshBtn) {
         refreshBtn.disabled = false;
         refreshBtn.setAttribute("aria-label", "Refresh references");
+      }
+    }
+  }
+
+  private async showAnnotations(reference: Reference): Promise<void> {
+    const overlay = document.createElement("div");
+    overlay.className = "annotations-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-labelledby", "annotationsTitle");
+    overlay.innerHTML = `
+      <section class="annotations-dialog">
+        <header class="annotations-header">
+          <div>
+            <h2 id="annotationsTitle">Paper annotations</h2>
+            <p>${escapeHtml(String(reference.title || "Untitled"))}</p>
+          </div>
+          <button type="button" class="annotations-close" aria-label="Close annotations" title="Close">&times;</button>
+        </header>
+        <div class="annotations-content" aria-live="polite">
+          <p class="loading">Loading annotations...</p>
+        </div>
+      </section>
+    `;
+    document.getElementById("root")!.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.querySelector(".annotations-close")!.addEventListener("click", close);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) close();
+    });
+
+    try {
+      const response = await this.api.getAnnotations(String(reference.id));
+      const annotations: PaperAnnotation[] = Array.isArray(response?.annotations)
+        ? response.annotations
+        : extractArray(response);
+      const content = overlay.querySelector<HTMLElement>(".annotations-content")!;
+
+      if (annotations.length === 0) {
+        content.innerHTML = `<p class="empty-state">No annotations have been added to this paper.</p>`;
+        return;
+      }
+
+      content.innerHTML = annotations.map((annotation) => {
+        const color = /^#[0-9a-f]{3,8}$/i.test(annotation.color || "") ? annotation.color! : "#8FA8C8";
+        const details = [
+          annotation.page != null ? `Page ${escapeHtml(String(annotation.page))}` : "",
+          annotation.created_at && !Number.isNaN(Date.parse(annotation.created_at))
+            ? new Date(annotation.created_at).toLocaleDateString()
+            : "",
+        ].filter(Boolean).join(" · ");
+        return `
+          <article class="annotation-card" style="--annotation-color: ${color}">
+            ${annotation.highlighted_text ? `<blockquote>${escapeHtml(String(annotation.highlighted_text))}</blockquote>` : ""}
+            ${annotation.note ? `<p class="annotation-note">${escapeHtml(String(annotation.note))}</p>` : ""}
+            ${details ? `<p class="annotation-meta">${details}</p>` : ""}
+          </article>
+        `;
+      }).join("");
+    } catch (error) {
+      const content = overlay.querySelector<HTMLElement>(".annotations-content");
+      if (content) {
+        content.innerHTML = `<p class="error-message">Unable to load annotations: ${escapeHtml(error instanceof Error ? error.message : String(error))}</p>`;
       }
     }
   }
